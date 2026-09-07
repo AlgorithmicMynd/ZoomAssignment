@@ -79,9 +79,7 @@ export default function ScheduleMeetingModal({ isOpen, onClose }: ScheduleMeetin
           <div className="cal-banner" style={{ margin: '14px 14px 0', borderRadius: 8 }}>
             <span className="cal-banner-icon"><Info size={15} /></span>
             <span className="cal-banner-text">
-              You haven&apos;t connected your calendar yet.{' '}
-              <span className="cal-banner-link">Connect now</span>
-              {' '}to manage all your meetings and events in one place.
+              You haven&apos;t connected your calendar yet. Connect now to manage all your meetings and events in one place.
             </span>
             <button className="cal-banner-close" onClick={() => setCalBannerVisible(false)}>×</button>
           </div>

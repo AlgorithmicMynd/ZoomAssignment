@@ -1,6 +1,7 @@
 'use client';
 
-import { Video, Plus, Calendar, ArrowUpFromLine, PenLine, ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Video, Plus, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface ActionButtonsProps {
   onNewMeeting: () => void;
@@ -9,11 +10,26 @@ interface ActionButtonsProps {
 }
 
 export default function ActionButtons({ onNewMeeting, onJoinMeeting, onScheduleMeeting }: ActionButtonsProps) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [submenuOpen, setSubmenuOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+        setSubmenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <div className="action-row">
 
       {/* New meeting */}
-      <div className="action-btn-wrap">
+      <div className="action-btn-wrap" ref={dropdownRef} style={{ position: 'relative' }}>
         <button
           id="btn-new-meeting"
           onClick={onNewMeeting}
@@ -22,9 +38,44 @@ export default function ActionButtons({ onNewMeeting, onJoinMeeting, onScheduleM
         >
           <Video size={28} strokeWidth={1.8} />
         </button>
-        <span className="action-label">
+        <span 
+          className="action-label" 
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+        >
           New meeting <span className="action-chevron"><ChevronDown size={11} /></span>
         </span>
+        
+        {dropdownOpen && (
+          <div className="new-meeting-dropdown">
+            <label className="nm-dropdown-item">
+              <input type="checkbox" defaultChecked />
+              Start with video
+            </label>
+            <label className="nm-dropdown-item">
+              <input type="checkbox" />
+              Use my personal meeting ID (PMI)
+            </label>
+            <div 
+              className="nm-dropdown-item has-submenu"
+              onMouseEnter={() => setSubmenuOpen(true)}
+              onMouseLeave={() => setSubmenuOpen(false)}
+            >
+              <span className="pmi-number">973 470 9238</span>
+              <ChevronRight size={14} />
+              
+              {submenuOpen && (
+                <div className="nm-submenu">
+                  <button className="nm-submenu-item">Copy meeting link</button>
+                  <button className="nm-submenu-item">Copy ID</button>
+                  <button className="nm-submenu-item">Copy invitation</button>
+                  <div className="nm-separator" />
+                  <button className="nm-submenu-item">PMI settings</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Join */}
@@ -60,22 +111,6 @@ export default function ActionButtons({ onNewMeeting, onJoinMeeting, onScheduleM
           </span>
         </button>
         <span className="action-label">Schedule</span>
-      </div>
-
-      {/* Share screen */}
-      <div className="action-btn-wrap">
-        <button className="action-squircle" title="Share screen">
-          <ArrowUpFromLine size={26} strokeWidth={1.8} />
-        </button>
-        <span className="action-label">Share screen</span>
-      </div>
-
-      {/* My Notes */}
-      <div className="action-btn-wrap">
-        <button className="action-squircle" title="My Notes">
-          <PenLine size={26} strokeWidth={1.8} />
-        </button>
-        <span className="action-label">My Notes</span>
       </div>
 
     </div>

@@ -86,7 +86,11 @@ export default function Home() {
   const mergedRecent = [
     ...pastFromUpcoming.filter((m) => !allRecentIds.has(m.meeting_id)),
     ...recentMeetings,
-  ];
+  ].sort((a, b) => {
+    const timeA = new Date(a.ended_at || a.scheduled_at || a.created_at).getTime();
+    const timeB = new Date(b.ended_at || b.scheduled_at || b.created_at).getTime();
+    return timeB - timeA;
+  }).slice(0, 3);
 
   const handleNewMeeting = async () => {
     try {
@@ -122,8 +126,7 @@ export default function Home() {
           <div className="pro-tip-banner">
             <span className="pro-tip-badge">PRO TIP</span>
             <span className="pro-tip-text">
-              Accomplish more on your to-do list with Zoom Workplace Pro! You&apos;ll get longer meetings, unlimited AI note-taking with My Notes, 10GB Cloud Storage, and more!{' '}
-              <span className="pro-tip-link">Upgrade today</span>
+              Accomplish more on your to-do list with Zoom Workplace Pro! You&apos;ll get longer meetings, unlimited AI note-taking with My Notes, 10GB Cloud Storage, and more! Upgrade today.
             </span>
             <button className="pro-tip-close" onClick={() => setProBannerVisible(false)} aria-label="Dismiss">×</button>
           </div>
@@ -151,9 +154,7 @@ export default function Home() {
               <div className="cal-banner">
                 <span className="cal-banner-icon">ℹ</span>
                 <span className="cal-banner-text">
-                  You haven&apos;t connected your calendar yet.{' '}
-                  <span className="cal-banner-link">Connect now</span>
-                  {' '}to manage all your meetings and events in one place.
+                  You haven&apos;t connected your calendar yet. Connect now to manage all your meetings and events in one place.
                 </span>
                 <button className="cal-banner-close" onClick={() => setCalBannerVisible(false)} aria-label="Dismiss">×</button>
               </div>
@@ -181,18 +182,12 @@ export default function Home() {
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                   Today
                 </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <button className="date-nav-arrow">‹</button>
-                  <button className="date-nav-arrow">›</button>
-                  <button className="date-nav-more">···</button>
-                </div>
               </div>
 
               {/* Body */}
               <div className="meetings-body">
                 {futureMeetings.length === 0 ? (
                   <div className="meetings-empty">
-                    <div className="meetings-empty-icon">⛱️</div>
                     <p className="meetings-empty-text">No meetings scheduled.</p>
                     <button
                       className="meetings-empty-link"
@@ -210,13 +205,6 @@ export default function Home() {
                     />
                   ))
                 )}
-              </div>
-
-              {/* Footer */}
-              <div className="meetings-footer">
-                <button className="meetings-footer-link">
-                  Open recordings ›
-                </button>
               </div>
             </div>
 

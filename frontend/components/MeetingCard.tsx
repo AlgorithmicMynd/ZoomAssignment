@@ -1,6 +1,6 @@
 'use client';
 
-import { Sparkles, MessageCircle, MoreHorizontal, ChevronDown } from 'lucide-react';
+import { Sparkles, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Meeting {
@@ -49,22 +49,6 @@ export default function MeetingCard({ meeting, onClick }: MeetingCardProps) {
           AI Companion
           <ChevronDown size={11} style={{ color: 'var(--text-tertiary)' }} />
         </button>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          <button
-            className="action-icon-btn"
-            onClick={(e) => e.stopPropagation()}
-            aria-label="Chat"
-          >
-            <MessageCircle size={16} />
-          </button>
-          <button
-            className="action-icon-btn"
-            onClick={(e) => e.stopPropagation()}
-            aria-label="More options"
-          >
-            <MoreHorizontal size={16} />
-          </button>
-        </div>
       </div>
     </div>
   );

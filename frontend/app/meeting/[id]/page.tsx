@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getMeeting, endMeeting } from '@/lib/api';
 import { useRouter, useParams } from 'next/navigation';
 import {
@@ -22,9 +22,19 @@ export default function MeetingRoom() {
 
   const [meeting, setMeeting] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // WebRTC & Pre-Join States
+  const [hasJoined, setHasJoined] = useState(false);
+  const [userName, setUserName] = useState('Harsh Shukla');
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  
   const [participantCount] = useState(DEMO_PARTICIPANTS.length);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const preJoinVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!meetingId) return;
@@ -34,6 +44,51 @@ export default function MeetingRoom() {
       .finally(() => setLoading(false));
   }, [meetingId, router]);
 
+  // Request media permissions on mount
+  useEffect(() => {
+    let stream: MediaStream;
+    async function getMedia() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(stream);
+      } catch (err) {
+        console.error('Error accessing media devices.', err);
+      }
+    }
+    getMedia();
+    return () => {
+      // Cleanup stream tracks when component unmounts
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Sync stream tracks with mute/video state
+  useEffect(() => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = !isVideoOff;
+      });
+    }
+  }, [isMuted, isVideoOff, localStream]);
+
+  // Attach stream to video elements
+  useEffect(() => {
+    if (preJoinVideoRef.current && localStream && !isVideoOff) {
+      preJoinVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, hasJoined, isVideoOff]);
+
+  useEffect(() => {
+    if (videoRef.current && localStream && hasJoined && !isVideoOff) {
+      videoRef.current.srcObject = localStream;
+    }
+  }, [localStream, hasJoined, isVideoOff]);
+
   if (loading) {
     return (
       <div style={{ height: '100vh', background: '#111113', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -42,6 +97,108 @@ export default function MeetingRoom() {
     );
   }
 
+  // PRE-JOIN SCREEN
+  if (!hasJoined) {
+    return (
+      <div className="pre-join-container">
+        <div className="pre-join-modal">
+          <div className="pre-join-header">
+            <div className="pre-join-header-left" style={{ position: 'relative' }}>
+              <button 
+                className="mac-dot mac-dot-close" 
+                onClick={() => setShowLeaveDialog(!showLeaveDialog)}
+                aria-label="Close"
+              />
+              <button className="mac-dot mac-dot-min" aria-label="Minimize" />
+              <button className="mac-dot mac-dot-max" aria-label="Maximize" />
+              
+              {showLeaveDialog && (
+                <div className="leave-dialog-popup">
+                  <button className="leave-dialog-btn-red" onClick={() => router.push('/')}>
+                    Leave meeting
+                  </button>
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 12px 0' }}>
+                    <button className="leave-dialog-link" onClick={() => setShowLeaveDialog(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="pre-join-title">{meeting?.title || 'Zoom Meeting'}</div>
+            <div style={{ width: 150 }} /> {/* Spacer */}
+          </div>
+          
+          <div className="pre-join-video-wrapper">
+            {isVideoOff ? (
+              <div className="pre-join-video-off">
+                <div className="pre-join-avatar">
+                  {userName.substring(0, 2).toUpperCase() || 'U'}
+                </div>
+              </div>
+            ) : (
+              <video
+                ref={preJoinVideoRef}
+                autoPlay
+                playsInline
+                muted // Always mute local video playback to avoid feedback
+                className="pre-join-video"
+              />
+            )}
+            
+            <div className="pre-join-controls-overlay">
+              <button 
+                className={`pre-join-overlay-btn ${isMuted ? 'muted' : ''}`}
+                onClick={() => setIsMuted(!isMuted)}
+              >
+                {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                <span>Audio</span>
+              </button>
+              <button 
+                className={`pre-join-overlay-btn ${isVideoOff ? 'muted' : ''}`}
+                onClick={() => setIsVideoOff(!isVideoOff)}
+              >
+                {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
+                <span>Video</span>
+              </button>
+            </div>
+          </div>
+          
+          <div className="pre-join-device-selects">
+             <div className="device-select">
+               <Mic size={16} color="#A0A0A0" />
+               <select className="device-dropdown" defaultValue="default">
+                 <option value="default">Default Microphone</option>
+               </select>
+             </div>
+             <div className="device-select">
+               <Video size={16} color="#A0A0A0" />
+               <select className="device-dropdown" defaultValue="default">
+                 <option value="default">Default Camera</option>
+               </select>
+             </div>
+          </div>
+          
+          <div className="pre-join-footer" style={{ justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <input 
+                type="text" 
+                className="pre-join-name-input" 
+                placeholder="Enter your name" 
+                value={userName} 
+                onChange={(e) => setUserName(e.target.value)} 
+              />
+              <button className="pre-join-start-btn" onClick={() => setHasJoined(true)}>
+                Start
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MEETING ROOM UI
   return (
     <div className="room-shell">
       {/* ── Top: participant gallery strip ── */}
@@ -106,24 +263,28 @@ export default function MeetingRoom() {
                 margin: '0 auto 16px',
                 fontSize: 36, fontWeight: 700, color: 'white',
               }}>
-                HS
+                {userName.substring(0, 2).toUpperCase() || 'U'}
               </div>
-              <p style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>Harsh Shukla</p>
+              <p style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>{userName}</p>
               <p style={{ color: '#A0A0A0', fontSize: 13, marginTop: 4 }}>Camera is off</p>
             </div>
           ) : (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{
-                width: 96, height: 96, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #5B5BEB 0%, #3B82F6 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 16px',
-                fontSize: 36, fontWeight: 700, color: 'white',
-              }}>
-                HS
-              </div>
-              <p style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>Harsh Shukla</p>
-              <p style={{ color: '#A0A0A0', fontSize: 13, marginTop: 4 }}>You</p>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted // Always mute local video playback to avoid feedback
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          )}
+
+          {!isVideoOff && (
+            <div style={{
+              position: 'absolute', bottom: 12, left: 16,
+              background: 'rgba(0,0,0,0.5)', color: 'white',
+              fontSize: 13, padding: '4px 10px', borderRadius: 4,
+            }}>
+              {userName}
             </div>
           )}
 
