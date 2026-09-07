@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg-primary: #1C1C1E;
+  --color-bg-secondary: #232325;
+  --color-bg-tertiary: #2D2D2E;
+  --color-bg-dark: #0A0A0A;
+
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A0A0A0;
+  --color-text-tertiary: #6A6A6A;
+
+  --color-brand-primary-blue: #0E72ED;
+  --color-brand-orange: #F26D21;
+  --color-brand-green: #23D959;
+  --color-status-red: #E02828;
+  --color-status-green-accent: #00FF00;
+
+  --color-border: #3A3A3C;
+  --color-hover: #383838;
+  --color-focus-ring: #0E72ED;
+}
+
+* {
+  @apply box-border;
+}
+
+html, body {
+  @apply h-full bg-[#1C1C1E] text-[#FFFFFF];
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+#__next {
+  @apply h-full;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[#0E72ED] text-white px-6 py-3 rounded-md font-medium hover:bg-blue-600 transition-colors;
+  }
+
+  .btn-secondary {
+    @apply border border-[#3A3A3C] text-white px-6 py-3 rounded-md font-medium hover:bg-[#383838] transition-colors;
+  }
+
+  .btn-squircle {
+    @apply w-20 h-20 rounded-2xl flex items-center justify-center font-medium transition-all hover:scale-105;
+  }
+
+  .input-base {
+    @apply bg-[#2D2D2E] border border-[#3A3A3C] text-white px-4 py-3 rounded-md focus:border-[#0E72ED] focus:outline-none transition-colors placeholder:text-[#6A6A6A];
+  }
+
+  .card {
+    @apply bg-[#232325] rounded-lg p-6 border border-[#3A3A3C];
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+  }
+
+  .modal {
+    @apply bg-[#232325] rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto;
+  }
+}
+
+::-webkit-scrollbar {
+  @apply w-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-[#3A3A3C] rounded-full hover:bg-[#4A4A4C];
+}
