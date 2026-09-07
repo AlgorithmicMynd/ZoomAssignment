@@ -1,6 +1,6 @@
 'use client';
 
-import { Video, Plus, Calendar, Share2, FileText } from 'lucide-react';
+import { Video, Plus, Calendar, ArrowUpFromLine, PenLine, ChevronDown } from 'lucide-react';
 
 interface ActionButtonsProps {
   onNewMeeting: () => void;
@@ -10,40 +10,74 @@ interface ActionButtonsProps {
 
 export default function ActionButtons({ onNewMeeting, onJoinMeeting, onScheduleMeeting }: ActionButtonsProps) {
   return (
-    <div className="flex gap-6 justify-center mb-12">
-      <button
-        onClick={onNewMeeting}
-        className="btn-squircle bg-[#F26D21] hover:bg-[#E55A0E] flex flex-col items-center gap-2"
-      >
-        <Video size={32} />
-        <span className="text-xs text-[#A0A0A0] mt-2">New meeting</span>
-      </button>
+    <div className="action-row">
 
-      <button
-        onClick={onJoinMeeting}
-        className="btn-squircle bg-[#0E72ED] hover:bg-[#0557B8] flex flex-col items-center gap-2"
-      >
-        <Plus size={32} />
-        <span className="text-xs text-[#A0A0A0] mt-2">Join</span>
-      </button>
+      {/* New meeting */}
+      <div className="action-btn-wrap">
+        <button
+          id="btn-new-meeting"
+          onClick={onNewMeeting}
+          className="action-squircle orange"
+          title="New meeting"
+        >
+          <Video size={28} strokeWidth={1.8} />
+        </button>
+        <span className="action-label">
+          New meeting <span className="action-chevron"><ChevronDown size={11} /></span>
+        </span>
+      </div>
 
-      <button
-        onClick={onScheduleMeeting}
-        className="btn-squircle bg-[#0E72ED] hover:bg-[#0557B8] flex flex-col items-center gap-2"
-      >
-        <Calendar size={32} />
-        <span className="text-xs text-[#A0A0A0] mt-2">Schedule</span>
-      </button>
+      {/* Join */}
+      <div className="action-btn-wrap">
+        <button
+          id="btn-join-meeting"
+          onClick={onJoinMeeting}
+          className="action-squircle"
+          title="Join a meeting"
+        >
+          <Plus size={28} strokeWidth={1.8} />
+        </button>
+        <span className="action-label">Join</span>
+      </div>
 
-      <button className="btn-squircle bg-[#0E72ED] hover:bg-[#0557B8] flex flex-col items-center gap-2">
-        <Share2 size={32} />
-        <span className="text-xs text-[#A0A0A0] mt-2">Share screen</span>
-      </button>
+      {/* Schedule */}
+      <div className="action-btn-wrap">
+        <button
+          id="btn-schedule-meeting"
+          onClick={onScheduleMeeting}
+          className="action-squircle"
+          title="Schedule a meeting"
+        >
+          {/* Calendar with "19" inside */}
+          <span style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Calendar size={28} strokeWidth={1.8} />
+            <span style={{
+              position: 'absolute',
+              fontSize: '10px',
+              fontWeight: 700,
+              marginTop: '6px',
+            }}>19</span>
+          </span>
+        </button>
+        <span className="action-label">Schedule</span>
+      </div>
 
-      <button className="btn-squircle bg-[#0E72ED] hover:bg-[#0557B8] flex flex-col items-center gap-2">
-        <FileText size={32} />
-        <span className="text-xs text-[#A0A0A0] mt-2">My Notes</span>
-      </button>
+      {/* Share screen */}
+      <div className="action-btn-wrap">
+        <button className="action-squircle" title="Share screen">
+          <ArrowUpFromLine size={26} strokeWidth={1.8} />
+        </button>
+        <span className="action-label">Share screen</span>
+      </div>
+
+      {/* My Notes */}
+      <div className="action-btn-wrap">
+        <button className="action-squircle" title="My Notes">
+          <PenLine size={26} strokeWidth={1.8} />
+        </button>
+        <span className="action-label">My Notes</span>
+      </div>
+
     </div>
   );
 }

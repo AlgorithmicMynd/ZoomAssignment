@@ -1,155 +1,255 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import ActionButtons from '@/components/ActionButtons';
 import MeetingCard from '@/components/MeetingCard';
+import MeetingDetailPopup from '@/components/MeetingDetailPopup';
 import JoinMeetingModal from '@/components/modals/JoinMeetingModal';
 import ScheduleMeetingModal from '@/components/modals/ScheduleMeetingModal';
 import { createMeeting, getUpcomingMeetings, getRecentMeetings } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+
+function useClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function formatTime(d: Date) {
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+}
+
+function formatDate(d: Date) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
 
 export default function Home() {
+  const now = useClock();
   const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
   const [recentMeetings, setRecentMeetings] = useState<any[]>([]);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState<any | null>(null);
+  const [proBannerVisible, setProBannerVisible] = useState(true);
+  const [calBannerVisible, setCalBannerVisible] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    loadMeetings();
-  }, []);
-
-  const loadMeetings = async () => {
+  const loadMeetings = useCallback(async () => {
     try {
       const [upcoming, recent] = await Promise.all([
         getUpcomingMeetings(),
         getRecentMeetings(),
       ]);
-      setUpcomingMeetings(upcoming);
-      setRecentMeetings(recent);
+      setUpcomingMeetings(upcoming || []);
+      setRecentMeetings(recent || []);
     } catch (err) {
       console.error('Failed to load meetings', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadMeetings();
+  }, [loadMeetings]);
+
+  // Additional client-side classification:
+  // If a meeting's scheduled_at is in the past but the backend still returned it in upcoming
+  // (e.g. backend clock vs local clock skew), keep it sorted correctly.
+  const nowMs = now.getTime();
+
+  // Partition upcoming meetings: only truly future ones show in Today section
+  const futureMeetings = upcomingMeetings.filter((m) => {
+    if (!m.scheduled_at) return false;
+    return new Date(m.scheduled_at).getTime() > nowMs;
+  });
+
+  // Past scheduled meetings (from upcoming list) merge into recent
+  const pastFromUpcoming = upcomingMeetings.filter((m) => {
+    if (!m.scheduled_at) return false;
+    return new Date(m.scheduled_at).getTime() <= nowMs;
+  });
+
+  // Combined recent list: past-from-upcoming (newer) + backend recent, deduplicated
+  const allRecentIds = new Set(recentMeetings.map((m: any) => m.meeting_id));
+  const mergedRecent = [
+    ...pastFromUpcoming.filter((m) => !allRecentIds.has(m.meeting_id)),
+    ...recentMeetings,
+  ];
 
   const handleNewMeeting = async () => {
-    setLoading(true);
     try {
-      const meeting = await createMeeting();
+      const meeting = await createMeeting({ title: "Harsh Shukla's Zoom Meeting" });
       router.push(`/meeting/${meeting.meeting_id}`);
     } catch (err) {
-      console.error('Failed to create meeting', err);
-    } finally {
-      setLoading(false);
+      alert('Failed to create meeting: ' + (err as Error).message);
     }
   };
 
-  const now = new Date();
-  const displayTime = format(now, 'h:mm a');
-  const displayDate = format(now, 'EEEE, d MMMM');
+  const handleScheduleClose = () => {
+    setShowScheduleModal(false);
+    loadMeetings();
+  };
 
   return (
-    <div className="flex h-screen bg-[#1C1C1E]">
+    <div className="layout-shell">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+
+      {/* Detail popup (left panel overlay over main content) */}
+      {selectedMeeting && (
+        <MeetingDetailPopup
+          meeting={selectedMeeting}
+          onClose={() => setSelectedMeeting(null)}
+        />
+      )}
+
+      <div className="main-column">
         <Header />
 
-        <main className="flex-1 overflow-y-auto px-12 py-8">
-          {/* Pro tip banner */}
-          <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-4 mb-8 flex justify-between items-center">
-            <div>
-              <span className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold mr-3">PRO TIP</span>
-              <span className="text-[#A0A0A0]">Accomplish more on your to-do list with Zoom Workplace Pro!</span>
-            </div>
-            <button className="text-[#A0A0A0] hover:text-white">×</button>
+        {/* Pro tip banner */}
+        {proBannerVisible && (
+          <div className="pro-tip-banner">
+            <span className="pro-tip-badge">PRO TIP</span>
+            <span className="pro-tip-text">
+              Accomplish more on your to-do list with Zoom Workplace Pro! You&apos;ll get longer meetings, unlimited AI note-taking with My Notes, 10GB Cloud Storage, and more!{' '}
+              <span className="pro-tip-link">Upgrade today</span>
+            </span>
+            <button className="pro-tip-close" onClick={() => setProBannerVisible(false)} aria-label="Dismiss">×</button>
           </div>
+        )}
 
-          {/* Time display */}
-          <div className="text-center mb-12">
-            <div className="text-6xl font-bold text-white mb-2">{displayTime}</div>
-            <div className="text-[#A0A0A0]">{displayDate}</div>
-          </div>
-
-          {/* Action buttons */}
-          <ActionButtons
-            onNewMeeting={handleNewMeeting}
-            onJoinMeeting={() => setShowJoinModal(true)}
-            onScheduleMeeting={() => setShowScheduleModal(true)}
-          />
-
-          {/* Calendar alert banner */}
-          <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-4 mb-8 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="text-blue-400">ℹ</div>
-              <span className="text-[#A0A0A0]">
-                You haven't connected your calendar yet.
-                <span className="text-blue-400 cursor-pointer ml-1 underline">Connect now</span>
-              </span>
-            </div>
-            <button className="text-[#A0A0A0] hover:text-white">×</button>
-          </div>
-
-          {/* Upcoming meetings */}
-          <div className="card">
-            <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#3A3A3C]">
-              <div>
-                <span className="mr-2">+</span>
-                <span className="text-white font-semibold">Today {format(now, 'MMM d')} ▼</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="text-[#A0A0A0] hover:text-white px-3 py-1 border border-[#3A3A3C] rounded-md">Today</button>
-                <button className="text-[#A0A0A0] hover:text-white">←</button>
-                <button className="text-[#A0A0A0] hover:text-white">→</button>
-                <button className="text-[#A0A0A0] hover:text-white">⋯</button>
-              </div>
+        {/* Scrollable content area */}
+        <main className="dashboard-main">
+          {/* All centered content */}
+          <div className="dashboard-center">
+            {/* Clock */}
+            <div className="clock-area">
+              <div className="clock-time">{formatTime(now)}</div>
+              <div className="clock-date">{formatDate(now)}</div>
             </div>
 
-            {upcomingMeetings.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-[#A0A0A0] mb-4">☂️</div>
-                <p className="text-[#A0A0A0] mb-4">No meetings scheduled.</p>
-                <button
-                  onClick={() => setShowScheduleModal(true)}
-                  className="text-blue-400 hover:underline"
-                >
-                  + Schedule a meeting
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {upcomingMeetings.map((meeting) => (
-                  <MeetingCard key={meeting.meeting_id} meeting={meeting} />
-                ))}
+            {/* Action buttons */}
+            <ActionButtons
+              onNewMeeting={handleNewMeeting}
+              onJoinMeeting={() => setShowJoinModal(true)}
+              onScheduleMeeting={() => setShowScheduleModal(true)}
+            />
+
+            {/* Calendar alert banner */}
+            {calBannerVisible && (
+              <div className="cal-banner">
+                <span className="cal-banner-icon">ℹ</span>
+                <span className="cal-banner-text">
+                  You haven&apos;t connected your calendar yet.{' '}
+                  <span className="cal-banner-link">Connect now</span>
+                  {' '}to manage all your meetings and events in one place.
+                </span>
+                <button className="cal-banner-close" onClick={() => setCalBannerVisible(false)} aria-label="Dismiss">×</button>
               </div>
             )}
 
-            <div className="text-[#A0A0A0] text-sm cursor-pointer hover:text-white mt-6 pt-4 border-t border-[#3A3A3C]">
-              Open recordings {'>'}
-            </div>
-          </div>
+            {/* ── Upcoming / Today meetings card ── */}
+            <div className="meetings-card">
+              {/* Row 1: + Today, Sep 7 ▾ */}
+              <div className="meetings-card-header-top">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => setShowScheduleModal(true)}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 18, lineHeight: 1, cursor: 'pointer', padding: 0 }}
+                    aria-label="Add meeting"
+                  >+</button>
+                  <span className="meetings-card-title">
+                    Today, {now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ▾
+                  </span>
+                </div>
+              </div>
 
-          {/* Recent meetings */}
-          {recentMeetings.length > 0 && (
-            <div className="card mt-8">
-              <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#3A3A3C]">
-                <h3 className="text-white font-semibold">Recent Meetings</h3>
+              {/* Row 2: 📅 Today ‹ › ··· */}
+              <div className="meetings-card-header-nav">
+                <button className="date-nav-btn">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                  Today
+                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <button className="date-nav-arrow">‹</button>
+                  <button className="date-nav-arrow">›</button>
+                  <button className="date-nav-more">···</button>
+                </div>
               </div>
-              <div className="space-y-3">
-                {recentMeetings.map((meeting) => (
-                  <MeetingCard key={meeting.meeting_id} meeting={meeting} />
-                ))}
+
+              {/* Body */}
+              <div className="meetings-body">
+                {futureMeetings.length === 0 ? (
+                  <div className="meetings-empty">
+                    <div className="meetings-empty-icon">⛱️</div>
+                    <p className="meetings-empty-text">No meetings scheduled.</p>
+                    <button
+                      className="meetings-empty-link"
+                      onClick={() => setShowScheduleModal(true)}
+                    >
+                      + Schedule a meeting
+                    </button>
+                  </div>
+                ) : (
+                  futureMeetings.map((m) => (
+                    <MeetingCard
+                      key={m.meeting_id}
+                      meeting={m}
+                      onClick={() => setSelectedMeeting(m)}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="meetings-footer">
+                <button className="meetings-footer-link">
+                  Open recordings ›
+                </button>
               </div>
             </div>
-          )}
+
+            {/* ── Recent meetings ── */}
+            {mergedRecent.length > 0 && (
+              <div className="meetings-card" style={{ marginTop: 16 }}>
+                <div className="meetings-card-header-top">
+                  <span className="meetings-card-title">Recent Meetings</span>
+                </div>
+                <div className="meetings-body">
+                  {mergedRecent.map((m) => (
+                    <MeetingCard
+                      key={m.meeting_id}
+                      meeting={m}
+                      onClick={() => setSelectedMeeting(m)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>{/* end .dashboard-center */}
         </main>
       </div>
 
-      <JoinMeetingModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} />
-      <ScheduleMeetingModal isOpen={showScheduleModal} onClose={() => { setShowScheduleModal(false); loadMeetings(); }} />
+      {/* Modals */}
+      <JoinMeetingModal
+        isOpen={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+      />
+      <ScheduleMeetingModal
+        isOpen={showScheduleModal}
+        onClose={handleScheduleClose}
+      />
     </div>
   );
 }

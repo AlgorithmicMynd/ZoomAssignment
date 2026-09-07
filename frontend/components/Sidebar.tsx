@@ -1,47 +1,47 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, Video, MessageCircle, Settings, MoreVertical, Zap } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Home, Video, MessageCircle, Settings, MoreHorizontal, Zap } from 'lucide-react';
+
+const navItems = [
+  { icon: Home, label: 'Home', href: '/' },
+  { icon: Zap, label: 'ZoomMate', href: '#' },
+  { icon: Video, label: 'Meetings', href: '#' },
+  { icon: MessageCircle, label: 'Chat', href: '#' },
+  { icon: Zap, label: 'Hub', href: '#' },
+  { icon: MoreHorizontal, label: 'More', href: '#' },
+];
 
 export default function Sidebar() {
+  const pathname = usePathname();
+
   return (
-    <aside className="w-20 bg-[#1C1C1E] border-r border-[#3A3A3C] flex flex-col items-center py-6 gap-8 h-screen sticky top-0">
-      <Link href="/" className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <Home size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">Home</span>
+    <aside className="sidebar">
+      {navItems.map(({ icon: Icon, label, href }) => {
+        const isActive = href === '/' ? pathname === '/' : false;
+        return (
+          <Link
+            key={label}
+            href={href}
+            className={`sidebar-item${isActive ? ' active' : ''}`}
+          >
+            <span className="sidebar-icon">
+              <Icon size={22} strokeWidth={1.5} />
+            </span>
+            <span className="sidebar-label">{label}</span>
+          </Link>
+        );
+      })}
+
+      <div className="sidebar-spacer" />
+
+      <Link href="#" className="sidebar-item">
+        <span className="sidebar-icon">
+          <Settings size={22} strokeWidth={1.5} />
+        </span>
+        <span className="sidebar-label">Settings</span>
       </Link>
-
-      <button className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <Zap size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">ZoomMate</span>
-      </button>
-
-      <button className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <Video size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">Meetings</span>
-      </button>
-
-      <button className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <MessageCircle size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">Chat</span>
-      </button>
-
-      <button className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <Zap size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">Hub</span>
-      </button>
-
-      <button className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <MoreVertical size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">More</span>
-      </button>
-
-      <div className="flex-1"></div>
-
-      <button className="text-white hover:bg-[#383838] p-3 rounded-lg transition">
-        <Settings size={24} />
-        <span className="text-xs mt-1 text-[#A0A0A0]">Settings</span>
-      </button>
     </aside>
   );
 }

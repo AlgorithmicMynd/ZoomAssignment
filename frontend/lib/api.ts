@@ -43,3 +43,7 @@ export async function joinMeeting(meetingId: string, displayName: string) {
     body: JSON.stringify({ display_name: displayName }),
   });
 }
+
+export async function endMeeting(meetingId: string) {
+  return apiFetch(`/meetings/${meetingId}/end`, { method: "POST" });
+}
