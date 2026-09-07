@@ -128,7 +128,7 @@ export default function Home() {
             )}
 
             <div className="text-[#A0A0A0] text-sm cursor-pointer hover:text-white mt-6 pt-4 border-t border-[#3A3A3C]">
-              Open recordings >
+              Open recordings {'>'}
             </div>
           </div>
 
