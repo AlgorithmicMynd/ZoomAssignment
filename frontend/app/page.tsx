@@ -9,6 +9,7 @@ import MeetingCard from '@/components/MeetingCard';
 import MeetingDetailPopup from '@/components/MeetingDetailPopup';
 import JoinMeetingModal from '@/components/modals/JoinMeetingModal';
 import ScheduleMeetingModal from '@/components/modals/ScheduleMeetingModal';
+import { generateRandomName } from '@/lib/randomName';
 import { createMeeting, getUpcomingMeetings, getRecentMeetings } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
@@ -94,7 +95,7 @@ export default function Home() {
 
   const handleNewMeeting = async () => {
     try {
-      const meeting = await createMeeting({ title: "Harsh Shukla's Zoom Meeting" });
+      const meeting = await createMeeting({ title: `${generateRandomName()}'s Zoom Meeting` });
       router.push(`/meeting/${meeting.meeting_id}`);
     } catch (err) {
       alert('Failed to create meeting: ' + (err as Error).message);

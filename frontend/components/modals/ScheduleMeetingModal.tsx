@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Maximize2, Info } from 'lucide-react';
 import { createMeeting } from '@/lib/api';
+import { generateRandomName } from '@/lib/randomName';
 
 interface ScheduleMeetingModalProps {
+
   isOpen: boolean;
   onClose: () => void;
 }
@@ -20,7 +22,8 @@ function nowTimePlusMins(mins: number) {
 }
 
 export default function ScheduleMeetingModal({ isOpen, onClose }: ScheduleMeetingModalProps) {
-  const [title, setTitle] = useState("Harsh Shukla's Zoom Meeting");
+  const [title, setTitle] = useState('');
+  useEffect(() => setTitle(`${generateRandomName()}'s Zoom Meeting`), []);
   const [startDate, setStartDate] = useState(todayStr());
   const [startTime, setStartTime] = useState(nowTimePlusMins(5));
   const [endTime, setEndTime] = useState(nowTimePlusMins(35));

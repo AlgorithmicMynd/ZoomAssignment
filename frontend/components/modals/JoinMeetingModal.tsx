@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ChevronDown, Lock } from 'lucide-react';
 import { joinMeeting } from '@/lib/api';
+import { generateRandomName } from '@/lib/randomName';
 import { useRouter } from 'next/navigation';
 
 interface JoinMeetingModalProps {
@@ -29,7 +30,8 @@ function autoFormatId(raw: string): string {
 
 export default function JoinMeetingModal({ isOpen, onClose }: JoinMeetingModalProps) {
   const [meetingId, setMeetingId] = useState('');
-  const [displayName, setDisplayName] = useState('Harsh Shukla');
+  const [displayName, setDisplayName] = useState('');
+  useEffect(() => setDisplayName(generateRandomName()), []);
   const [passcode, setPasscode] = useState('');
   const [noAudio, setNoAudio] = useState(false);
   const [noVideo, setNoVideo] = useState(false);

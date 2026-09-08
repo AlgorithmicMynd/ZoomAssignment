@@ -37,7 +37,7 @@ export default function MeetingCard({ meeting, onClick }: MeetingCardProps) {
           </p>
         </>
       )}
-      <p className="meeting-entry-host">Host: Harsh Shukla</p>
+      <p className="meeting-entry-host">Host: Local User</p>
 
       <div className="meeting-entry-actions">
         <button

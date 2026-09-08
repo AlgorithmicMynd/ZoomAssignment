@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMeeting, endMeeting, joinMeeting } from '@/lib/api';
 import { useWebRTC } from '@/lib/useWebRTC';
 import { useRouter, useParams } from 'next/navigation';
+import { generateRandomName } from '@/lib/randomName';
 import {
   Mic, MicOff, Video, VideoOff, Shield, Users,
   MessageCircle, Share2, Circle, LayoutGrid, ChevronUp,
@@ -275,8 +276,8 @@ export default function MeetingRoom() {
 
   // Pre-join state
   const [hasJoined, setHasJoined] = useState(false);
-  const [userName, setUserName] = useState('Harsh Shukla');
-  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [userName, setUserName] = useState('');
+  useEffect(() => setUserName(generateRandomName()), []);
 
   // UI toggles (pre-join; post-join controlled via useWebRTC)
   const [preIsMuted, setPreIsMuted] = useState(false);

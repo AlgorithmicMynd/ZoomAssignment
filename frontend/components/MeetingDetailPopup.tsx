@@ -182,7 +182,7 @@ export default function MeetingDetailPopup({ meeting, onClose }: MeetingDetailPo
                   background: '#2ECC71', border: '1.5px solid var(--bg-secondary)',
                 }} />
               </div>
-              <span className="detail-section-text">Harsh Shukla (Host)</span>
+              <span className="detail-section-text">Local User (Host)</span>
             </div>
           </div>
         </div>
@@ -213,7 +213,7 @@ export default function MeetingDetailPopup({ meeting, onClose }: MeetingDetailPo
             <p className="form-label" style={{ marginBottom: 8 }}>Description</p>
             <hr className="divider" style={{ marginTop: 0, marginBottom: 8, width: 100 }} />
             <p className="detail-section-text" style={{ lineHeight: 1.7, fontSize: 12 }}>
-              Harsh Shukla is inviting you to a scheduled Zoom meeting.<br />
+              Local User is inviting you to a scheduled Zoom meeting.<br />
               Join Zoom Meeting<br />
               <a href={joinUrl} className="detail-link">{joinUrl}</a>
             </p>
