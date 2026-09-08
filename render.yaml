@@ -18,6 +18,8 @@ services:
     rootDir: backend
 
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: FRONTEND_BASE_URL
         value: https://your-zoom-clone.vercel.app   # ← UPDATE after Vercel deploy
       - key: DATABASE_URL
