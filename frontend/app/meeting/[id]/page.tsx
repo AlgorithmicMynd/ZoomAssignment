@@ -36,7 +36,18 @@ function AttachedVideo({
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    if (ref.current) ref.current.srcObject = stream;
+    const el = ref.current;
+    if (!el) return;
+    el.srcObject = stream;
+    if (stream) {
+      // Explicitly call play() to satisfy browser autoplay policy for audio.
+      // Browsers allow autoplay on <video> elements with audio once the user
+      // has interacted with the page (e.g., clicked "Join Meeting").
+      el.play().catch(() => {
+        // Autoplay was blocked — user must click to resume.
+        // This is non-fatal; video will play once they interact again.
+      });
+    }
   }, [stream]);
   return (
     <video
@@ -49,6 +60,7 @@ function AttachedVideo({
     />
   );
 }
+
 
 // ── Video Tile Component ──────────────────────────────────────────────────────
 function VideoTile({
