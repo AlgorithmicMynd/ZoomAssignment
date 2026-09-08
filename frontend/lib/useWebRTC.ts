@@ -563,25 +563,69 @@ export function useWebRTC(
   }, [autoJoin]);
 
   // ── Toggle Mute ──────────────────────────────────────────────────────────
-  const toggleMute = useCallback(() => {
+  const toggleMute = useCallback(async () => {
     const stream = localStreamRef.current;
     if (!stream) return;
     const newMuted = !isMutedRef.current;
     isMutedRef.current = newMuted;
-    stream.getAudioTracks().forEach(t => { t.enabled = !newMuted; });
-    setIsMuted(newMuted);
-    sendSignal({ type: 'media-state', isMuted: newMuted, isVideoOff: isVideoOffRef.current });
+
+    if (newMuted) {
+      stream.getAudioTracks().forEach(t => {
+        t.stop();
+        stream.removeTrack(t);
+      });
+    } else {
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const newTrack = newStream.getAudioTracks()[0];
+        stream.addTrack(newTrack);
+        peersRef.current.forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+          if (sender) sender.replaceTrack(newTrack);
+        });
+      } catch (e) {
+        console.error("Failed to reacquire audio", e);
+        isMutedRef.current = true; // rollback
+        return;
+      }
+    }
+
+    setIsMuted(isMutedRef.current);
+    sendSignal({ type: 'media-state', isMuted: isMutedRef.current, isVideoOff: isVideoOffRef.current });
   }, [sendSignal]);
 
   // ── Toggle Video ─────────────────────────────────────────────────────────
-  const toggleVideo = useCallback(() => {
+  const toggleVideo = useCallback(async () => {
     const stream = localStreamRef.current;
     if (!stream) return;
     const newOff = !isVideoOffRef.current;
     isVideoOffRef.current = newOff;
-    stream.getVideoTracks().forEach(t => { t.enabled = !newOff; });
-    setIsVideoOff(newOff);
-    sendSignal({ type: 'media-state', isMuted: isMutedRef.current, isVideoOff: newOff });
+
+    if (newOff) {
+      stream.getVideoTracks().forEach(t => {
+        t.stop();
+        stream.removeTrack(t);
+      });
+    } else {
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } }
+        });
+        const newTrack = newStream.getVideoTracks()[0];
+        stream.addTrack(newTrack);
+        peersRef.current.forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) sender.replaceTrack(newTrack);
+        });
+      } catch (e) {
+        console.error("Failed to reacquire video", e);
+        isVideoOffRef.current = true; // rollback
+        return;
+      }
+    }
+
+    setIsVideoOff(isVideoOffRef.current);
+    sendSignal({ type: 'media-state', isMuted: isMutedRef.current, isVideoOff: isVideoOffRef.current });
   }, [sendSignal]);
 
   // ── Screen Share ─────────────────────────────────────────────────────────

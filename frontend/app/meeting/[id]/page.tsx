@@ -322,20 +322,38 @@ export default function MeetingRoom() {
   useEffect(() => {
     if (hasJoined) return; // useWebRTC takes over once joined
     let stopped = false;
+
+    // Only request media for devices that are not toggled off
+    const constraints = {
+      video: !preIsVideoOff,
+      audio: !preIsMuted,
+    };
+
+    // If both are off, we can fully release the stream
+    if (!constraints.video && !constraints.audio) {
+      preStreamRef.current?.getTracks().forEach(t => t.stop());
+      preStreamRef.current = null;
+      setPreLocalStream(null);
+      return;
+    }
+
     navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
+      .getUserMedia(constraints)
       .then(stream => {
         if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
+        // Stop old tracks before replacing
+        preStreamRef.current?.getTracks().forEach(t => t.stop());
         preStreamRef.current = stream;
         setPreLocalStream(stream);
       })
       .catch(err => console.error('Pre-join media error:', err));
+      
     return () => {
       stopped = true;
       preStreamRef.current?.getTracks().forEach(t => t.stop());
       preStreamRef.current = null;
     };
-  }, [hasJoined]);
+  }, [hasJoined, preIsMuted, preIsVideoOff]);
 
   // Sync pre-join stream with video element
   useEffect(() => {
@@ -344,12 +362,6 @@ export default function MeetingRoom() {
     }
   }, [preLocalStream, preIsVideoOff]);
 
-  // Sync pre-join mute/video toggles on preview stream
-  useEffect(() => {
-    if (!preLocalStream) return;
-    preLocalStream.getAudioTracks().forEach(t => { t.enabled = !preIsMuted; });
-    preLocalStream.getVideoTracks().forEach(t => { t.enabled = !preIsVideoOff; });
-  }, [preIsMuted, preIsVideoOff, preLocalStream]);
 
   // ── Chat unread counter ──────────────────────────────────────────────────
   const prevMsgCount = useRef(0);
