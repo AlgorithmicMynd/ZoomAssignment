@@ -1193,14 +1193,19 @@ h1, h2, h3, h4, h5, h6 { font-weight: 700; color: var(--text-primary); }
   max-height: 100%;
 }
 
-/* 3–4 participants — 2×2 grid */
-.room-gallery.peers-3,
+/* 3 participants — all three side by side in a single row */
+.room-gallery.peers-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+/* 4 participants — 2×2 grid */
 .room-gallery.peers-4 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
 }
 
-/* 5–6 participants — 3×2 grid */
+/* 5–6 participants — 3 columns × 2 rows */
 .room-gallery.peers-5,
 .room-gallery.peers-6 {
   grid-template-columns: 1fr 1fr 1fr;
@@ -1215,20 +1220,28 @@ h1, h2, h3, h4, h5, h6 { font-weight: 700; color: var(--text-primary); }
   background: linear-gradient(135deg, #1e1e2e 0%, #12121a 100%);
   border: 2px solid transparent;
   transition: border-color 0.2s ease;
-  min-height: 0;  /* Required for grid shrink */
+  /* Critical: let the grid control sizing — don't let content overflow */
+  min-width: 0;
+  min-height: 0;
   width: 100%;
-  /* NO global aspect-ratio — peers-1 fills the whole stage;
-     multi-participant grids set their own aspect-ratio below. */
+  height: 100%;
 }
 
-/* Enforce 16:9 only when multiple tiles share the grid */
+/* Enforce 16:9 only when multiple tiles share the grid.
+   Use max-height as a safety net so tiles never overflow their grid cell. */
 .room-gallery.peers-2 .video-tile,
 .room-gallery.peers-3 .video-tile,
 .room-gallery.peers-4 .video-tile,
 .room-gallery.peers-5 .video-tile,
 .room-gallery.peers-6 .video-tile {
   aspect-ratio: 16 / 9;
+  /* Cap height so the tile never grows past the grid cell */
+  max-height: 100%;
+  max-width: 100%;
+  align-self: center;
+  justify-self: center;
 }
+
 
 .video-tile.is-self {
   border-color: rgba(91, 91, 235, 0.4);
