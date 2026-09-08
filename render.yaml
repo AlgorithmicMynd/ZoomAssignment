@@ -1,0 +1,33 @@
+# render.yaml — One-click Render.com deployment for the FastAPI signaling backend
+# Deploy by importing this repo to render.com and pointing to this file.
+# See: https://render.com/docs/infrastructure-as-code
+
+services:
+  - type: web
+    name: zoom-clone-backend
+    env: python
+    region: oregon  # change to 'frankfurt' or 'singapore' if closer to your evaluators
+    plan: free
+
+    # Build: install Python dependencies
+    buildCommand: "pip install -r requirements.txt"
+
+    # Start: run Uvicorn with ASGI (required for WebSocket support)
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+
+    rootDir: backend
+
+    envVars:
+      - key: FRONTEND_BASE_URL
+        value: https://your-zoom-clone.vercel.app   # ← UPDATE after Vercel deploy
+      - key: DATABASE_URL
+        value: sqlite:///./zoom.db                   # simple SQLite; survives free-tier restarts
+        # For persistent data across deploys, switch to a Neon/Supabase PostgreSQL URL:
+        # value: postgresql://user:pass@host/dbname
+
+    # Health check — UptimeRobot/Cron-job.org should ping this URL every 10 min
+    # to prevent the free tier from sleeping.
+    healthCheckPath: /api/health
+
+    # Render free tier scales to zero after 15 min of inactivity.
+    # Set up UptimeRobot to ping the healthCheckPath to keep it warm.

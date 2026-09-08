@@ -1,20 +1,199 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { getMeeting, endMeeting } from '@/lib/api';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { getMeeting, endMeeting, joinMeeting } from '@/lib/api';
+import { useWebRTC } from '@/lib/useWebRTC';
 import { useRouter, useParams } from 'next/navigation';
 import {
   Mic, MicOff, Video, VideoOff, Shield, Users,
-  MessageCircle, Share2, Circle, LayoutGrid, ChevronUp
+  MessageCircle, Share2, Circle, LayoutGrid, ChevronUp,
+  X, Send, Monitor,
 } from 'lucide-react';
 
-const DEMO_PARTICIPANTS = [
-  { name: 'Victoria Reyes', initials: 'VR', color: '#5B5BEB', muted: false },
-  { name: 'Henry Park', initials: 'HP', color: '#16A34A', muted: false, activeSpeaker: true },
-  { name: 'Marketing Huddle', initials: 'MH', color: '#DC2626', muted: true },
+// ── Colour palette for participant avatars ────────────────────────────────────
+const AVATAR_COLORS = [
+  '#5B5BEB', '#16A34A', '#DC2626', '#D97706',
+  '#0891B2', '#7C3AED', '#DB2777', '#059669',
 ];
+function avatarColor(id: string): string {
+  let hash = 0;
+  for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
+// ── Helper: attach MediaStream to a <video> ref ───────────────────────────────
+function AttachedVideo({
+  stream,
+  muted = false,
+  className,
+  style,
+}: {
+  stream: MediaStream | null;
+  muted?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.srcObject = stream;
+  }, [stream]);
+  return (
+    <video
+      ref={ref}
+      autoPlay
+      playsInline
+      muted={muted}
+      className={className}
+      style={style}
+    />
+  );
+}
+
+// ── Video Tile Component ──────────────────────────────────────────────────────
+function VideoTile({
+  participantId,
+  userName,
+  stream,
+  isMuted,
+  isVideoOff,
+  isSelf = false,
+}: {
+  participantId: string;
+  userName: string;
+  stream: MediaStream | null;
+  isMuted: boolean;
+  isVideoOff: boolean;
+  isSelf?: boolean;
+}) {
+  const initials = userName.slice(0, 2).toUpperCase() || 'U';
+  const color = avatarColor(participantId);
+
+  return (
+    <div className={`video-tile${isSelf ? ' is-self' : ''}`}>
+      {isVideoOff || !stream ? (
+        <div className="video-tile-avatar">
+          <div className="video-tile-initials" style={{ background: color }}>
+            {initials}
+          </div>
+        </div>
+      ) : (
+        <AttachedVideo
+          stream={stream}
+          muted={isSelf}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
+      )}
+
+      {isVideoOff && (
+        <div className="video-tile-off-label">Camera off</div>
+      )}
+
+      {isMuted && (
+        <div className="video-tile-mute-icon">
+          <MicOff size={13} color="white" />
+        </div>
+      )}
+
+      <div className="video-tile-name">
+        {isMuted && <MicOff size={10} style={{ color: '#E02828', flexShrink: 0 }} />}
+        {userName}{isSelf ? ' (You)' : ''}
+      </div>
+    </div>
+  );
+}
+
+// ── Chat Panel ────────────────────────────────────────────────────────────────
+function ChatPanel({
+  messages,
+  onSend,
+  onClose,
+}: {
+  messages: any[];
+  onSend: (text: string) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
+
+  const handleSend = () => {
+    const text = draft.trim();
+    if (!text) return;
+    onSend(text);
+    setDraft('');
+  };
+
+  return (
+    <div className="chat-panel">
+      <div className="chat-panel-header">
+        <span className="chat-panel-title">In-Meeting Chat</span>
+        <button className="chat-panel-close" onClick={onClose} title="Close Chat">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="chat-messages">
+        {messages.length === 0 && (
+          <p style={{ color: '#606060', fontSize: 13, textAlign: 'center', marginTop: 24 }}>
+            No messages yet. Say hello!
+          </p>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} className={`chat-msg${msg.isSelf ? ' self' : ''}`}>
+            <div className="chat-msg-meta">
+              <span className="chat-msg-sender">{msg.isSelf ? 'You' : msg.senderName}</span>
+              <span className="chat-msg-time">
+                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <div className="chat-msg-text">{msg.text}</div>
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="chat-input-row">
+        <input
+          className="chat-input"
+          placeholder="Type a message…"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+        />
+        <button
+          className="chat-send-btn"
+          onClick={handleSend}
+          disabled={!draft.trim()}
+          title="Send"
+        >
+          <Send size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Signaling Badge ────────────────────────────────────────────────────────────
+function SignalingBadge({ status }: { status: string }) {
+  const label: Record<string, string> = {
+    connected: 'Live',
+    connecting: 'Connecting…',
+    disconnected: 'Offline',
+    error: 'Error',
+  };
+  return (
+    <div className={`signaling-badge ${status}`}>
+      <div className="signaling-badge-dot" />
+      {label[status] ?? status}
+    </div>
+  );
+}
+
+// ── Main Meeting Room Component ───────────────────────────────────────────────
 export default function MeetingRoom() {
   const params = useParams();
   const meetingId = params?.id as string;
@@ -22,73 +201,117 @@ export default function MeetingRoom() {
 
   const [meeting, setMeeting] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
-  // WebRTC & Pre-Join States
+
+  // Pre-join state
   const [hasJoined, setHasJoined] = useState(false);
   const [userName, setUserName] = useState('Harsh Shukla');
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
-  
-  const [participantCount] = useState(DEMO_PARTICIPANTS.length);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const preJoinVideoRef = useRef<HTMLVideoElement>(null);
 
+  // UI toggles (pre-join; post-join controlled via useWebRTC)
+  const [preIsMuted, setPreIsMuted] = useState(false);
+  const [preIsVideoOff, setPreIsVideoOff] = useState(false);
+  const [preLocalStream, setPreLocalStream] = useState<MediaStream | null>(null);
+  const preJoinVideoRef = useRef<HTMLVideoElement>(null);
+  const preStreamRef = useRef<MediaStream | null>(null);
+
+  // Chat state
+  const [showChat, setShowChat] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // ── useWebRTC — only initialised after the user clicks "Join" ────────────
+  const {
+    localStream,
+    remotePeers,
+    chatMessages,
+    toggleMute,
+    toggleVideo,
+    startScreenShare,
+    stopScreenShare,
+    sendChat,
+    isMuted,
+    isVideoOff,
+    isScreenSharing,
+    signalingStatus,
+  } = useWebRTC(meetingId, userName, hasJoined);
+
+  // ── Load meeting metadata ────────────────────────────────────────────────
   useEffect(() => {
     if (!meetingId) return;
     getMeeting(meetingId)
-      .then((data) => setMeeting(data))
+      .then(data => setMeeting(data))
       .catch(() => router.replace('/'))
       .finally(() => setLoading(false));
   }, [meetingId, router]);
 
-  // Request media permissions on mount
+  // ── Pre-join media (preview only — stopped when joining) ─────────────────
   useEffect(() => {
-    let stream: MediaStream;
-    async function getMedia() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-      } catch (err) {
-        console.error('Error accessing media devices.', err);
-      }
-    }
-    getMedia();
+    if (hasJoined) return; // useWebRTC takes over once joined
+    let stopped = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
+        preStreamRef.current = stream;
+        setPreLocalStream(stream);
+      })
+      .catch(err => console.error('Pre-join media error:', err));
     return () => {
-      // Cleanup stream tracks when component unmounts
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      stopped = true;
+      preStreamRef.current?.getTracks().forEach(t => t.stop());
+      preStreamRef.current = null;
     };
+  }, [hasJoined]);
+
+  // Sync pre-join stream with video element
+  useEffect(() => {
+    if (preJoinVideoRef.current && preLocalStream && !preIsVideoOff) {
+      preJoinVideoRef.current.srcObject = preLocalStream;
+    }
+  }, [preLocalStream, preIsVideoOff]);
+
+  // Sync pre-join mute/video toggles on preview stream
+  useEffect(() => {
+    if (!preLocalStream) return;
+    preLocalStream.getAudioTracks().forEach(t => { t.enabled = !preIsMuted; });
+    preLocalStream.getVideoTracks().forEach(t => { t.enabled = !preIsVideoOff; });
+  }, [preIsMuted, preIsVideoOff, preLocalStream]);
+
+  // ── Chat unread counter ──────────────────────────────────────────────────
+  const prevMsgCount = useRef(0);
+  useEffect(() => {
+    if (!showChat && chatMessages.length > prevMsgCount.current) {
+      setUnreadCount(c => c + (chatMessages.length - prevMsgCount.current));
+    }
+    prevMsgCount.current = chatMessages.length;
+  }, [chatMessages.length, showChat]);
+
+  const handleOpenChat = useCallback(() => {
+    setShowChat(true);
+    setUnreadCount(0);
   }, []);
 
-  // Sync stream tracks with mute/video state
-  useEffect(() => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = !isMuted;
-      });
-      localStream.getVideoTracks().forEach(track => {
-        track.enabled = !isVideoOff;
-      });
-    }
-  }, [isMuted, isVideoOff, localStream]);
+  // ── Join handler ─────────────────────────────────────────────────────────
+  const handleJoin = useCallback(async () => {
+    // Stop pre-join preview stream before useWebRTC takes a new one
+    preStreamRef.current?.getTracks().forEach(t => t.stop());
+    preStreamRef.current = null;
+    setPreLocalStream(null);
 
-  // Attach stream to video elements
-  useEffect(() => {
-    if (preJoinVideoRef.current && localStream && !isVideoOff) {
-      preJoinVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream, hasJoined, isVideoOff]);
+    // Register in DB
+    try {
+      await joinMeeting(meetingId, userName);
+    } catch { /* non-blocking */ }
 
-  useEffect(() => {
-    if (videoRef.current && localStream && hasJoined && !isVideoOff) {
-      videoRef.current.srcObject = localStream;
-    }
-  }, [localStream, hasJoined, isVideoOff]);
+    setHasJoined(true);
+  }, [meetingId, userName]);
 
+  // ── Compute gallery layout ───────────────────────────────────────────────
+  const selfId = 'self'; // stable key for local tile
+  // Build array: [self, ...remote peers]
+  const totalTiles = 1 + remotePeers.size;
+  const galleryClass = `room-gallery peers-${Math.min(totalTiles, 6)}`;
+
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={{ height: '100vh', background: '#111113', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -97,21 +320,23 @@ export default function MeetingRoom() {
     );
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
   // PRE-JOIN SCREEN
+  // ════════════════════════════════════════════════════════════════════════════
   if (!hasJoined) {
     return (
       <div className="pre-join-container">
         <div className="pre-join-modal">
           <div className="pre-join-header">
             <div className="pre-join-header-left" style={{ position: 'relative' }}>
-              <button 
-                className="mac-dot mac-dot-close" 
+              <button
+                className="mac-dot mac-dot-close"
                 onClick={() => setShowLeaveDialog(!showLeaveDialog)}
                 aria-label="Close"
               />
               <button className="mac-dot mac-dot-min" aria-label="Minimize" />
               <button className="mac-dot mac-dot-max" aria-label="Maximize" />
-              
+
               {showLeaveDialog && (
                 <div className="leave-dialog-popup">
                   <button className="leave-dialog-btn-red" onClick={() => router.push('/')}>
@@ -126,14 +351,14 @@ export default function MeetingRoom() {
               )}
             </div>
             <div className="pre-join-title">{meeting?.title || 'Zoom Meeting'}</div>
-            <div style={{ width: 150 }} /> {/* Spacer */}
+            <div style={{ width: 150 }} />
           </div>
-          
+
           <div className="pre-join-video-wrapper">
-            {isVideoOff ? (
+            {preIsVideoOff ? (
               <div className="pre-join-video-off">
                 <div className="pre-join-avatar">
-                  {userName.substring(0, 2).toUpperCase() || 'U'}
+                  {userName.slice(0, 2).toUpperCase() || 'U'}
                 </div>
               </div>
             ) : (
@@ -141,55 +366,59 @@ export default function MeetingRoom() {
                 ref={preJoinVideoRef}
                 autoPlay
                 playsInline
-                muted // Always mute local video playback to avoid feedback
+                muted
                 className="pre-join-video"
               />
             )}
-            
+
             <div className="pre-join-controls-overlay">
-              <button 
-                className={`pre-join-overlay-btn ${isMuted ? 'muted' : ''}`}
-                onClick={() => setIsMuted(!isMuted)}
+              <button
+                className={`pre-join-overlay-btn ${preIsMuted ? 'muted' : ''}`}
+                onClick={() => setPreIsMuted(v => !v)}
               >
-                {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                {preIsMuted ? <MicOff size={20} /> : <Mic size={20} />}
                 <span>Audio</span>
               </button>
-              <button 
-                className={`pre-join-overlay-btn ${isVideoOff ? 'muted' : ''}`}
-                onClick={() => setIsVideoOff(!isVideoOff)}
+              <button
+                className={`pre-join-overlay-btn ${preIsVideoOff ? 'muted' : ''}`}
+                onClick={() => setPreIsVideoOff(v => !v)}
               >
-                {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
+                {preIsVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
                 <span>Video</span>
               </button>
             </div>
           </div>
-          
+
           <div className="pre-join-device-selects">
-             <div className="device-select">
-               <Mic size={16} color="#A0A0A0" />
-               <select className="device-dropdown" defaultValue="default">
-                 <option value="default">Default Microphone</option>
-               </select>
-             </div>
-             <div className="device-select">
-               <Video size={16} color="#A0A0A0" />
-               <select className="device-dropdown" defaultValue="default">
-                 <option value="default">Default Camera</option>
-               </select>
-             </div>
+            <div className="device-select">
+              <Mic size={16} color="#A0A0A0" />
+              <select className="device-dropdown" defaultValue="default">
+                <option value="default">Default Microphone</option>
+              </select>
+            </div>
+            <div className="device-select">
+              <Video size={16} color="#A0A0A0" />
+              <select className="device-dropdown" defaultValue="default">
+                <option value="default">Default Camera</option>
+              </select>
+            </div>
           </div>
-          
+
           <div className="pre-join-footer" style={{ justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <input 
-                type="text" 
-                className="pre-join-name-input" 
-                placeholder="Enter your name" 
-                value={userName} 
-                onChange={(e) => setUserName(e.target.value)} 
+              <input
+                type="text"
+                className="pre-join-name-input"
+                placeholder="Enter your name"
+                value={userName}
+                onChange={e => setUserName(e.target.value)}
               />
-              <button className="pre-join-start-btn" onClick={() => setHasJoined(true)}>
-                Start
+              <button
+                className="pre-join-start-btn"
+                onClick={handleJoin}
+                disabled={!userName.trim()}
+              >
+                Join Now
               </button>
             </div>
           </div>
@@ -198,36 +427,24 @@ export default function MeetingRoom() {
     );
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
   // MEETING ROOM UI
+  // ════════════════════════════════════════════════════════════════════════════
   return (
     <div className="room-shell">
-      {/* ── Top: participant gallery strip ── */}
+      {/* ── Top bar ── */}
       <div className="room-top-bar">
-        <span className="room-title">Zoom Meeting</span>
+        <span className="room-title">{meeting?.title || 'Zoom Meeting'}</span>
 
-        <div style={{ display: 'flex', gap: 8, flex: 1, justifyContent: 'center' }}>
-          {DEMO_PARTICIPANTS.map((p) => (
-            <div
-              key={p.name}
-              className={`participant-tile${p.activeSpeaker ? ' active-speaker' : ''}`}
-            >
-              <div className="participant-tile-avatar">
-                <div
-                  className="participant-initials"
-                  style={{ background: p.color }}
-                >
-                  {p.initials}
-                </div>
-              </div>
-              <div className="participant-tile-name">
-                {p.muted && (
-                  <MicOff size={10} style={{ color: '#E02828' }} />
-                )}
-                {p.name}
-              </div>
-            </div>
-          ))}
-        </div>
+        <SignalingBadge status={signalingStatus} />
+
+        <div style={{ flex: 1 }} />
+
+        {meeting && (
+          <span style={{ color: '#606060', fontSize: 11 }}>
+            ID: {meeting.meeting_id}
+          </span>
+        )}
 
         <button
           style={{
@@ -243,61 +460,38 @@ export default function MeetingRoom() {
         </button>
       </div>
 
-      {/* ── Main video stage ── */}
+      {/* ── Screen share banner ── */}
+      {isScreenSharing && (
+        <div className="screen-share-badge">
+          🖥 You are sharing your screen
+        </div>
+      )}
+
+      {/* ── Gallery grid ── */}
       <div className="room-main">
-        {/* Big central tile — "you" */}
-        <div style={{
-          width: '100%', height: '100%', maxWidth: 900,
-          background: 'linear-gradient(160deg, #1A1A2E 0%, #0D0D18 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative',
-          borderRadius: 0,
-          overflow: 'hidden',
-        }}>
-          {isVideoOff ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{
-                width: 96, height: 96, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #5B5BEB 0%, #3B82F6 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 16px',
-                fontSize: 36, fontWeight: 700, color: 'white',
-              }}>
-                {userName.substring(0, 2).toUpperCase() || 'U'}
-              </div>
-              <p style={{ color: 'white', fontSize: 16, fontWeight: 600 }}>{userName}</p>
-              <p style={{ color: '#A0A0A0', fontSize: 13, marginTop: 4 }}>Camera is off</p>
-            </div>
-          ) : (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted // Always mute local video playback to avoid feedback
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        <div className={galleryClass} style={{ width: '100%', height: '100%' }}>
+          {/* Local (self) tile */}
+          <VideoTile
+            key={selfId}
+            participantId={selfId}
+            userName={userName}
+            stream={localStream}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            isSelf
+          />
+
+          {/* Remote peer tiles */}
+          {Array.from(remotePeers.values()).map(peer => (
+            <VideoTile
+              key={peer.participantId}
+              participantId={peer.participantId}
+              userName={peer.userName}
+              stream={peer.stream}
+              isMuted={peer.isMuted}
+              isVideoOff={peer.isVideoOff}
             />
-          )}
-
-          {!isVideoOff && (
-            <div style={{
-              position: 'absolute', bottom: 12, left: 16,
-              background: 'rgba(0,0,0,0.5)', color: 'white',
-              fontSize: 13, padding: '4px 10px', borderRadius: 4,
-            }}>
-              {userName}
-            </div>
-          )}
-
-          {/* Meeting ID overlay bottom-right */}
-          {meeting && (
-            <div style={{
-              position: 'absolute', bottom: 12, right: 16,
-              background: 'rgba(0,0,0,0.5)', color: '#A0A0A0',
-              fontSize: 11, padding: '4px 10px', borderRadius: 4,
-            }}>
-              Meeting ID: {meeting.meeting_id}
-            </div>
-          )}
+          ))}
         </div>
       </div>
 
@@ -308,7 +502,7 @@ export default function MeetingRoom() {
           <button
             id="ctrl-mute"
             className={`ctrl-btn${isMuted ? ' muted' : ' active'}`}
-            onClick={() => setIsMuted((v) => !v)}
+            onClick={toggleMute}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
@@ -322,7 +516,7 @@ export default function MeetingRoom() {
           <button
             id="ctrl-video"
             className={`ctrl-btn${isVideoOff ? ' muted' : ' active'}`}
-            onClick={() => setIsVideoOff((v) => !v)}
+            onClick={toggleVideo}
             title={isVideoOff ? 'Start Video' : 'Stop Video'}
           >
             {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
@@ -343,19 +537,33 @@ export default function MeetingRoom() {
         <button id="ctrl-participants" className="ctrl-btn active" style={{ position: 'relative' }}>
           <Users size={20} />
           <span>Participants</span>
-          <span className="participant-count-badge">{participantCount}</span>
+          <span className="participant-count-badge">{1 + remotePeers.size}</span>
         </button>
 
         {/* Chat */}
-        <button id="ctrl-chat" className="ctrl-btn active">
+        <button
+          id="ctrl-chat"
+          className="ctrl-btn active"
+          onClick={handleOpenChat}
+          style={{ position: 'relative' }}
+          title="Chat"
+        >
           <MessageCircle size={20} />
           <span>Chat</span>
+          {unreadCount > 0 && (
+            <span className="chat-unread-badge">{unreadCount}</span>
+          )}
         </button>
 
-        {/* Share Screen — green */}
-        <button id="ctrl-share" className="ctrl-btn share-screen">
-          <Share2 size={20} />
-          <span>Share Screen</span>
+        {/* Screen Share */}
+        <button
+          id="ctrl-share"
+          className={`ctrl-btn${isScreenSharing ? ' muted' : ' share-screen'}`}
+          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+          title={isScreenSharing ? 'Stop sharing' : 'Share Screen'}
+        >
+          {isScreenSharing ? <Monitor size={20} /> : <Share2 size={20} />}
+          <span>{isScreenSharing ? 'Stop Share' : 'Share Screen'}</span>
         </button>
 
         {/* Record */}
@@ -385,6 +593,15 @@ export default function MeetingRoom() {
           End
         </button>
       </div>
+
+      {/* ── Chat panel ── */}
+      {showChat && (
+        <ChatPanel
+          messages={chatMessages}
+          onSend={sendChat}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }
