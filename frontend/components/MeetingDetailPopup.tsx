@@ -11,11 +11,13 @@ import { format } from 'date-fns';
 interface Meeting {
   meeting_id: string;
   title: string;
+  passcode?: string | null;
   scheduled_at?: string | null;
   duration_minutes?: number | null;
   invite_link: string;
   status: string;
 }
+
 
 interface MeetingDetailPopupProps {
   meeting: Meeting | null;
@@ -86,23 +88,79 @@ export default function MeetingDetailPopup({ meeting, onClose }: MeetingDetailPo
 
         <hr className="divider" />
 
-        {/* Join URL */}
-        <div className="detail-section">
-          <MapPin size={16} className="detail-section-icon" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <a
-              href={joinUrl}
-              className="detail-link"
-              onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(joinUrl); }}
-              title="Click to copy"
+        {/* Meeting Invite Info — ID + Passcode + copy invite */}
+        <div className="detail-section" style={{ flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapPin size={16} className="detail-section-icon" style={{ flexShrink: 0 }} />
+            <p className="form-label" style={{ margin: 0 }}>Join Info</p>
+          </div>
+
+          {/* Info card */}
+          <div style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            marginLeft: 24,
+          }}>
+            {/* Join link */}
+            <div>
+              <p style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2 }}>Join link</p>
+              <a
+                href={joinUrl}
+                className="detail-link"
+                onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(joinUrl); }}
+                title="Click to copy link"
+                style={{ fontSize: 12.5, wordBreak: 'break-all' }}
+              >
+                {joinUrl}
+              </a>
+            </div>
+
+            <div style={{ display: 'flex', gap: 20 }}>
+              {/* Meeting ID */}
+              <div>
+                <p style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2 }}>Meeting ID</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.04em' }}>
+                  {meeting.meeting_id}
+                </p>
+              </div>
+
+              {/* Passcode */}
+              {meeting.passcode && (
+                <div>
+                  <p style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2 }}>Passcode</p>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.15em' }}>
+                    {meeting.passcode}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Copy full invite button */}
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ alignSelf: 'flex-start', marginTop: 2 }}
+              onClick={() => {
+                const text = [
+                  `${meeting.title} - Zoom Meeting`,
+                  ``,
+                  `Join Zoom Meeting:`,
+                  joinUrl,
+                  ``,
+                  `Meeting ID: ${meeting.meeting_id}`,
+                  meeting.passcode ? `Passcode: ${meeting.passcode}` : '',
+                ].filter(l => l !== undefined).join('\n');
+                navigator.clipboard.writeText(text);
+              }}
             >
-              {joinUrl}
-            </a>
-            <p className="detail-section-text" style={{ fontSize: 11, marginTop: 2 }}>Click to copy</p>
+              Copy Invite
+            </button>
           </div>
         </div>
-
-        <hr className="divider" />
 
         {/* Invitees */}
         <div className="detail-section">

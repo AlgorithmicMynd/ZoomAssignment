@@ -516,24 +516,67 @@ export default function MeetingRoom() {
         <div style={{ flex: 1 }} />
 
         {meeting && (
-          <span style={{ color: '#606060', fontSize: 11 }}>
-            ID: {meeting.meeting_id}
-          </span>
-        )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Meeting ID + Passcode pill */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 7, padding: '4px 11px',
+              fontSize: 11.5, color: '#B0B0B0',
+            }}>
+              <span>ID:&nbsp;<strong style={{ color: '#fff', letterSpacing: '0.05em' }}>{meeting.meeting_id}</strong></span>
+              {meeting.passcode && (
+                <>
+                  <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)' }} />
+                  <span>Passcode:&nbsp;<strong style={{ color: '#fff', letterSpacing: '0.12em' }}>{meeting.passcode}</strong></span>
+                </>
+              )}
+            </div>
 
-        <button
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            color: 'white', borderRadius: 6,
-            padding: '5px 12px', fontSize: 12.5, cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          <LayoutGrid size={14} /> View
-        </button>
+            {/* Copy invite button */}
+            <button
+              title="Copy invite to clipboard"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: 'white', borderRadius: 6,
+                padding: '5px 12px', fontSize: 12.5, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+              onClick={() => {
+                const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                const link = `${origin}/meeting/${meeting.meeting_id}`;
+                const text = [
+                  `${meeting.title} - Zoom Meeting`,
+                  ``,
+                  `Join Zoom Meeting: ${link}`,
+                  `Meeting ID: ${meeting.meeting_id}`,
+                  meeting.passcode ? `Passcode: ${meeting.passcode}` : '',
+                ].filter(Boolean).join('\n');
+                navigator.clipboard.writeText(text);
+              }}
+            >
+              📋 Copy Invite
+            </button>
+
+            <button
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: 'white', borderRadius: 6,
+                padding: '5px 12px', fontSize: 12.5, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              <LayoutGrid size={14} /> View
+            </button>
+          </div>
+        )}
       </div>
+
 
       {/* ── Screen share banner ── */}
       {isScreenSharing && (
