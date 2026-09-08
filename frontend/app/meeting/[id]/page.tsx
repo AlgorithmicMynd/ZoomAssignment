@@ -278,6 +278,7 @@ export default function MeetingRoom() {
   const [hasJoined, setHasJoined] = useState(false);
   const [userName, setUserName] = useState('');
   useEffect(() => setUserName(generateRandomName()), []);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
 
   // UI toggles (pre-join; post-join controlled via useWebRTC)
   const [preIsMuted, setPreIsMuted] = useState(false);
