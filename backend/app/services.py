@@ -21,10 +21,14 @@ def create_meeting(db: Session, meeting_data: MeetingCreate, base_url: str):
     # Scheduled meetings start in 'scheduled' state; instant ones are 'active'
     status = "scheduled" if meeting_data.scheduled_at else "active"
 
+    # Auto-generate a 6-digit passcode if caller didn't supply one
+    passcode = meeting_data.passcode or ''.join(random.choices(string.digits, k=6))
+
     meeting = Meeting(
         meeting_id=meeting_id,
         title=title,
         description=meeting_data.description,
+        passcode=passcode,
         scheduled_at=meeting_data.scheduled_at,
         duration_minutes=meeting_data.duration_minutes,
         invite_link=invite_link,
@@ -36,9 +40,23 @@ def create_meeting(db: Session, meeting_data: MeetingCreate, base_url: str):
     return meeting
 
 
+def _normalize_meeting_id(raw: str) -> str:
+    """
+    Normalise a user-supplied meeting ID to the canonical XXX-XXX-XXX format.
+    Accepts: '123456789', '123 456 789', '123-456-789' etc.
+    """
+    digits = ''.join(c for c in raw if c.isdigit())
+    if len(digits) == 9:
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:9]}"
+    # Return raw value so the DB lookup fails cleanly with a 404
+    return raw.strip()
+
+
 def get_meeting(db: Session, meeting_id: str):
-    """Get meeting by its public meeting_id string."""
-    return db.query(Meeting).filter(Meeting.meeting_id == meeting_id).first()
+    """Get meeting by its public meeting_id string (accepts dashes or plain digits)."""
+    canonical = _normalize_meeting_id(meeting_id)
+    return db.query(Meeting).filter(Meeting.meeting_id == canonical).first()
+
 
 
 def get_upcoming_meetings(db: Session):

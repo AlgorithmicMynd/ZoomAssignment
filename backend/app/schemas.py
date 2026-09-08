@@ -8,12 +8,15 @@ class MeetingCreate(BaseModel):
     description: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     duration_minutes: Optional[int] = None
+    passcode: Optional[str] = None   # caller can set a 4-6 char passcode
+
 
 
 class MeetingResponse(BaseModel):
     meeting_id: str
     title: str
     description: Optional[str] = None
+    passcode: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     duration_minutes: Optional[int] = None
     invite_link: str
@@ -25,8 +28,11 @@ class MeetingResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+
 class JoinRequest(BaseModel):
     display_name: str
+    passcode: Optional[str] = None   # required only if meeting has a passcode
+
 
 
 class ParticipantResponse(BaseModel):

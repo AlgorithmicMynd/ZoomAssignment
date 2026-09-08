@@ -10,6 +10,7 @@ class Meeting(Base):
     meeting_id = Column(String, unique=True, nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    passcode = Column(String, nullable=True)   # 6-digit passcode; NULL = no password
     scheduled_at = Column(DateTime, nullable=True)
     duration_minutes = Column(Integer, nullable=True)
     invite_link = Column(String, unique=True, nullable=False, index=True)

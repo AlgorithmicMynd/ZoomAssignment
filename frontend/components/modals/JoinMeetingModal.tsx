@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown, Lock } from 'lucide-react';
 import { joinMeeting } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
@@ -10,30 +10,59 @@ interface JoinMeetingModalProps {
   onClose: () => void;
 }
 
+/** Normalise user input → canonical XXX-XXX-XXX format the server uses. */
+function normaliseId(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 9) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 9)}`;
+  }
+  return raw.trim();
+}
+
+/** Auto-format the input as the user types: inserts dashes at position 3 and 7 */
+function autoFormatId(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 9);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export default function JoinMeetingModal({ isOpen, onClose }: JoinMeetingModalProps) {
   const [meetingId, setMeetingId] = useState('');
   const [displayName, setDisplayName] = useState('Harsh Shukla');
+  const [passcode, setPasscode] = useState('');
   const [noAudio, setNoAudio] = useState(false);
   const [noVideo, setNoVideo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  const isJoinEnabled = meetingId.trim().length > 0 && displayName.trim().length > 0;
+  // Only enable Join when there are 9 digit characters entered
+  const rawDigits = meetingId.replace(/\D/g, '');
+  const isIdComplete = rawDigits.length === 9;
+  const isJoinEnabled = isIdComplete && displayName.trim().length > 0;
+
+  const handleIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMeetingId(autoFormatId(e.target.value));
+    setError('');
+  };
 
   const handleJoin = async () => {
     if (!isJoinEnabled) return;
     setLoading(true);
     setError('');
     try {
-      // Strip spaces/dashes so "123-456-789" becomes "123456789" for lookup
-      const cleanId = meetingId.replace(/[\s\-]/g, '');
-      await joinMeeting(cleanId, displayName.trim());
-      router.push(`/meeting/${cleanId}`);
+      const canonicalId = normaliseId(meetingId);
+      await joinMeeting(canonicalId, displayName.trim(), passcode.trim() || undefined);
+      router.push(`/meeting/${canonicalId}`);
       onClose();
     } catch (err: unknown) {
-      const error = err as Error;
-      setError(error.message || 'Meeting not found. Check the ID and try again.');
+      const e = err as Error;
+      if (e.message?.toLowerCase().includes('passcode') || e.message?.toLowerCase().includes('incorrect')) {
+        setError('Incorrect passcode. Please check and try again.');
+      } else {
+        setError(e.message || 'Meeting not found. Check the ID and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -57,14 +86,16 @@ export default function JoinMeetingModal({ isOpen, onClose }: JoinMeetingModalPr
 
         {/* Body */}
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Meeting ID dropdown-style input */}
+
+          {/* Meeting ID */}
           <div style={{ position: 'relative' }}>
             <input
               id="join-meeting-id"
               type="text"
-              placeholder="Meeting ID or personal link name"
+              inputMode="numeric"
+              placeholder="Meeting ID (e.g. 123-456-789)"
               value={meetingId}
-              onChange={(e) => { setMeetingId(e.target.value); setError(''); }}
+              onChange={handleIdChange}
               className="form-input"
               autoFocus
             />
@@ -73,6 +104,26 @@ export default function JoinMeetingModal({ isOpen, onClose }: JoinMeetingModalPr
               style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }}
             />
           </div>
+
+          {/* Passcode — shown once ID is fully entered */}
+          {isIdComplete && (
+            <div style={{ position: 'relative' }}>
+              <Lock
+                size={14}
+                style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }}
+              />
+              <input
+                id="join-passcode"
+                type="text"
+                inputMode="numeric"
+                placeholder="Meeting passcode"
+                value={passcode}
+                onChange={(e) => { setPasscode(e.target.value); setError(''); }}
+                className="form-input"
+                style={{ paddingLeft: 34 }}
+              />
+            </div>
+          )}
 
           {/* Name */}
           <input
@@ -125,3 +176,4 @@ export default function JoinMeetingModal({ isOpen, onClose }: JoinMeetingModalPr
     </div>
   );
 }
+

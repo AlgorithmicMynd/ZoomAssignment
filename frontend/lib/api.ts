@@ -37,12 +37,13 @@ export async function getRecentMeetings() {
   return apiFetch("/meetings/recent/list");
 }
 
-export async function joinMeeting(meetingId: string, displayName: string) {
+export async function joinMeeting(meetingId: string, displayName: string, passcode?: string) {
   return apiFetch(`/meetings/${meetingId}/join`, {
     method: "POST",
-    body: JSON.stringify({ display_name: displayName }),
+    body: JSON.stringify({ display_name: displayName, passcode: passcode ?? null }),
   });
 }
+
 
 export async function endMeeting(meetingId: string) {
   return apiFetch(`/meetings/${meetingId}/end`, { method: "POST" });

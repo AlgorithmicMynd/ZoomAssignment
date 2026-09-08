@@ -151,8 +151,15 @@ def join_meeting(meeting_id: str, join_req: JoinRequest, db: Session = Depends(g
     meeting = services.get_meeting(db, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Passcode validation: only enforce when the meeting has a passcode set
+    if meeting.passcode:
+        if not join_req.passcode or join_req.passcode.strip() != meeting.passcode.strip():
+            raise HTTPException(status_code=403, detail="Incorrect passcode")
+
     participant = services.add_participant(db, meeting.id, join_req.display_name)
     return participant
+
 
 
 @app.post("/api/meetings/{meeting_id}/end", response_model=MeetingResponse)
