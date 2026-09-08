@@ -9,7 +9,6 @@
  *  - Outbound video bitrate clamped to 400 Kbps per peer (RTCRtpSender params).
  *  - Trickle ICE with candidate queuing (handles candidates arriving before
  *    remote description is set).
- *  - Polite Peer pattern to resolve SDP glare (simultaneous offers) cleanly.
  *  - Google public STUN servers for NAT traversal (zero cost, high uptime).
  *  - Keepalive ping every 25 seconds to prevent proxy/cloud timeout.
  */
@@ -184,19 +183,32 @@ export function useWebRTC(
   }, []);
 
   // ── Create RTCPeerConnection for a given remote participant ───────────────
+  // shouldCreateOffer=true  → this peer sends the offer  (impolite / already-in-room)
+  // shouldCreateOffer=false → this peer waits for offer  (polite / just-joined)
   const createPeerConnection = useCallback(
-    (remoteParticipantId: string, isPolite: boolean): RTCPeerConnection => {
+    (remoteParticipantId: string, shouldCreateOffer: boolean): RTCPeerConnection => {
+      // Close any stale connection for this peer
+      const existing = peersRef.current.get(remoteParticipantId);
+      if (existing) {
+        existing.close();
+      }
+
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-      // Attach all local tracks to this connection
+      // ── CRITICAL: Add local tracks BEFORE anything else ──────────────────
+      // If we don't add tracks now, onnegotiationneeded fires with no media,
+      // producing an offer/answer with no video/audio sections.
       const stream = localStreamRef.current;
       if (stream) {
         stream.getTracks().forEach(track => {
           pc.addTrack(track, stream);
         });
+        console.log('[WebRTC] Added', stream.getTracks().length, 'local tracks to PC for', remoteParticipantId);
+      } else {
+        console.warn('[WebRTC] No local stream available when creating PC for', remoteParticipantId);
       }
 
-      // ICE candidate trickle — send to remote peer via signaling server
+      // ── ICE candidate trickle ─────────────────────────────────────────────
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
           sendSignal({
@@ -207,53 +219,59 @@ export function useWebRTC(
         }
       };
 
-      // When remote media arrives, update our state
-      pc.ontrack = ({ streams }) => {
-        const [remoteStream] = streams;
+      pc.onicecandidateerror = (event) => {
+        console.warn('[ICE] candidate error:', event);
+      };
+
+      // ── When remote media arrives, update state ───────────────────────────
+      pc.ontrack = (event) => {
+        console.log('[WebRTC] Got remote track from', remoteParticipantId, ':', event.track.kind);
+        // Always use event.streams[0] when available; fallback to constructing one
+        const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
         updatePeer(remoteParticipantId, { stream: remoteStream });
       };
 
-      // Connection state monitoring
+      // ── Connection state monitoring ───────────────────────────────────────
       pc.onconnectionstatechange = () => {
+        console.log('[WebRTC] Connection state →', remoteParticipantId, ':', pc.connectionState);
         if (pc.connectionState === 'connected') {
           applyBitrateCap(pc);
         }
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        if (pc.connectionState === 'failed') {
+          console.warn('[WebRTC] Connection failed with', remoteParticipantId, '— restarting ICE');
+          pc.restartIce();
+        }
+        if (pc.connectionState === 'closed') {
           removePeer(remoteParticipantId);
         }
       };
 
-      /**
-       * Polite Peer Negotiation (W3C Perfect Negotiation pattern)
-       * ---------------------------------------------------------
-       * When both peers simultaneously generate offers (glare), the polite
-       * peer backs off and accepts the impolite peer's offer instead.
-       * isPolite = true for the participant who joined LATER.
-       */
-      let makingOffer = false;
-      let ignoreOffer = false;
-
-      pc.onnegotiationneeded = async () => {
-        try {
-          makingOffer = true;
-          await pc.setLocalDescription();
-          sendSignal({
-            type: 'signal-offer',
-            targetId: remoteParticipantId,
-            sdp: pc.localDescription,
-          });
-        } catch (err) {
-          console.error('Negotiation error:', err);
-        } finally {
-          makingOffer = false;
-        }
+      pc.oniceconnectionstatechange = () => {
+        console.log('[ICE] state →', remoteParticipantId, ':', pc.iceConnectionState);
       };
 
-      // Store so message handler can use it
-      (pc as any).__isPolite = isPolite;
-      (pc as any).__makingOffer = () => makingOffer;
-      (pc as any).__setIgnoreOffer = (v: boolean) => { ignoreOffer = v; };
-      (pc as any).__getIgnoreOffer = () => ignoreOffer;
+      // ── Offer creation (only for the impolite / already-in-room peer) ─────
+      if (shouldCreateOffer) {
+        pc.onnegotiationneeded = async () => {
+          try {
+            console.log('[WebRTC] onnegotiationneeded — creating offer for', remoteParticipantId);
+            if (pc.signalingState !== 'stable') {
+              console.warn('[WebRTC] Skipping offer — signaling state is', pc.signalingState);
+              return;
+            }
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            sendSignal({
+              type: 'signal-offer',
+              targetId: remoteParticipantId,
+              sdp: pc.localDescription,
+            });
+            console.log('[WebRTC] Offer sent to', remoteParticipantId);
+          } catch (err) {
+            console.error('[WebRTC] Offer creation error:', err);
+          }
+        };
+      }
 
       peersRef.current.set(remoteParticipantId, pc);
       return pc;
@@ -264,40 +282,46 @@ export function useWebRTC(
   // ── Handle SDP Offer from a remote peer ──────────────────────────────────
   const handleOffer = useCallback(
     async (senderId: string, sdp: RTCSessionDescriptionInit) => {
+      console.log('[WebRTC] Received offer from', senderId);
+
       let pc = peersRef.current.get(senderId);
       if (!pc) {
-        // Polite = false because the *other* side initiated (they joined before us)
+        // First time seeing this peer — create PC (we are the answerer, no offer)
         pc = createPeerConnection(senderId, false);
       }
 
-      const isPolite: boolean = (pc as any).__isPolite ?? false;
-      const makingOffer: boolean = (pc as any).__makingOffer?.() ?? false;
-      const offerCollision =
-        sdp.type === 'offer' &&
-        (makingOffer || pc.signalingState !== 'stable');
-
-      const ignoreOffer = !isPolite && offerCollision;
-      (pc as any).__setIgnoreOffer?.(ignoreOffer);
-
-      if (ignoreOffer) return;
-
-      await pc.setRemoteDescription(sdp);
+      // Handle offer collision: if we have a local offer in-flight, rollback
+      if (pc.signalingState !== 'stable') {
+        console.warn('[WebRTC] Offer collision from', senderId, '— rolling back. State:', pc.signalingState);
+        try {
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+            pc.setRemoteDescription(sdp),
+          ]);
+        } catch (e) {
+          console.error('[WebRTC] Rollback failed:', e);
+          return;
+        }
+      } else {
+        await pc.setRemoteDescription(sdp);
+      }
 
       // Drain any ICE candidates that arrived before the remote description
       const queued = pendingCandidatesRef.current.get(senderId) ?? [];
       for (const c of queued) {
-        await pc.addIceCandidate(c).catch(() => {});
+        await pc.addIceCandidate(c).catch(e => console.warn('[ICE] queued candidate error:', e));
       }
       pendingCandidatesRef.current.delete(senderId);
 
-      if (sdp.type === 'offer') {
-        await pc.setLocalDescription();
-        sendSignal({
-          type: 'signal-answer',
-          targetId: senderId,
-          sdp: pc.localDescription,
-        });
-      }
+      // Create and send answer
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      sendSignal({
+        type: 'signal-answer',
+        targetId: senderId,
+        sdp: pc.localDescription,
+      });
+      console.log('[WebRTC] Answer sent to', senderId);
     },
     [createPeerConnection, sendSignal],
   );
@@ -305,11 +329,18 @@ export function useWebRTC(
   // ── Handle SDP Answer ────────────────────────────────────────────────────
   const handleAnswer = useCallback(
     async (senderId: string, sdp: RTCSessionDescriptionInit) => {
+      console.log('[WebRTC] Received answer from', senderId);
       const pc = peersRef.current.get(senderId);
-      if (!pc) return;
-      const ignoreOffer: boolean = (pc as any).__getIgnoreOffer?.() ?? false;
-      if (ignoreOffer) return;
-      await pc.setRemoteDescription(sdp);
+      if (!pc) {
+        console.warn('[WebRTC] No peer connection for answer from', senderId);
+        return;
+      }
+      if (pc.signalingState === 'have-local-offer') {
+        await pc.setRemoteDescription(sdp);
+        console.log('[WebRTC] Remote description set from answer —', senderId);
+      } else {
+        console.warn('[WebRTC] Unexpected answer in state:', pc.signalingState, 'from', senderId);
+      }
     },
     [],
   );
@@ -325,115 +356,122 @@ export function useWebRTC(
         pendingCandidatesRef.current.set(senderId, q);
         return;
       }
-      await pc.addIceCandidate(candidate).catch(() => {});
+      await pc.addIceCandidate(candidate).catch(e => console.warn('[ICE] add candidate error:', e));
     },
     [],
   );
 
   // ── WebSocket message router ──────────────────────────────────────────────
-  const handleWsMessage = useCallback(
-    async (event: MessageEvent) => {
-      let data: Record<string, any>;
-      try {
-        data = JSON.parse(event.data as string);
-      } catch {
-        return;
-      }
+  // Use a ref for the handler so ws.onmessage always calls the latest
+  // version of the handler without stale closures.
+  const handleWsMessageRef = useRef<((event: MessageEvent) => Promise<void>) | null>(null);
+  handleWsMessageRef.current = async (event: MessageEvent) => {
+    let data: Record<string, any>;
+    try {
+      data = JSON.parse(event.data as string);
+    } catch {
+      return;
+    }
 
-      switch (data.type) {
-        case 'room-joined': {
-          /**
-           * We just joined. existingPeers is the list of participants already
-           * in the room. We are the POLITE peer (we join after them), so we
-           * create connections for each existing peer.
-           * The *existing* peers will receive our `user-joined` broadcast and
-           * they will initiate offers to us (they are impolite).
-           */
-          const peers: Array<{ participantId: string; userName: string; isMuted: boolean; isVideoOff: boolean }> =
-            data.existingPeers ?? [];
-          for (const p of peers) {
-            addPeer({
-              participantId: p.participantId,
-              userName: p.userName,
-              stream: null,
-              isMuted: p.isMuted,
-              isVideoOff: p.isVideoOff,
-            });
-            // Create a peer connection for each existing peer (we are polite)
-            createPeerConnection(p.participantId, true);
-          }
-          break;
-        }
+    if (data.type !== 'pong') {
+      console.log('[WS] Received:', data.type, data);
+    }
 
-        case 'user-joined': {
-          /**
-           * A new participant arrived while we are already in the room.
-           * We are the IMPOLITE peer (we arrived first), so we initiate the offer.
-           */
-          const { participantId, userName: peerName } = data;
+    switch (data.type) {
+      case 'room-joined': {
+        /**
+         * We just joined. existingPeers is the list of participants already
+         * in the room. WE are the POLITE peer — we wait for offers from them.
+         * We just create the PC infrastructure ready to receive their offers.
+         */
+        const peers: Array<{ participantId: string; userName: string; isMuted: boolean; isVideoOff: boolean }> =
+          data.existingPeers ?? [];
+        console.log('[WS] room-joined — existing peers:', peers.map(p => p.userName));
+
+        for (const p of peers) {
           addPeer({
-            participantId,
-            userName: peerName,
+            participantId: p.participantId,
+            userName: p.userName,
             stream: null,
-            isMuted: false,
-            isVideoOff: false,
+            isMuted: p.isMuted,
+            isVideoOff: p.isVideoOff,
           });
-          // Create the connection and trigger negotiationneeded → offer
-          createPeerConnection(participantId, false);
-          break;
+          // Create PC but do NOT send offer — wait to receive one
+          createPeerConnection(p.participantId, false);
         }
-
-        case 'user-left': {
-          removePeer(data.participantId);
-          break;
-        }
-
-        case 'signal-offer': {
-          await handleOffer(data.senderId, data.sdp);
-          break;
-        }
-
-        case 'signal-answer': {
-          await handleAnswer(data.senderId, data.sdp);
-          break;
-        }
-
-        case 'signal-ice-candidate': {
-          await handleIceCandidate(data.senderId, data.candidate);
-          break;
-        }
-
-        case 'media-state': {
-          updatePeer(data.participantId, {
-            isMuted: data.isMuted,
-            isVideoOff: data.isVideoOff,
-          });
-          break;
-        }
-
-        case 'chat-message': {
-          setChatMessages(prev => [
-            ...prev,
-            {
-              senderId: data.senderId,
-              senderName: data.senderName,
-              text: data.text,
-              timestamp: data.timestamp,
-              isSelf: data.senderId === participantIdRef.current,
-            },
-          ]);
-          break;
-        }
-
-        case 'pong':
-          break;
-
-        default:
-          break;
+        break;
       }
-    },
-    [addPeer, removePeer, createPeerConnection, handleOffer, handleAnswer, handleIceCandidate, updatePeer],
-  );
+
+      case 'user-joined': {
+        /**
+         * A new participant arrived while we are already in the room.
+         * We are the IMPOLITE peer — WE create the offer.
+         */
+        const { participantId, userName: peerName } = data;
+        console.log('[WS] user-joined:', peerName, '(', participantId, ')');
+        addPeer({
+          participantId,
+          userName: peerName,
+          stream: null,
+          isMuted: false,
+          isVideoOff: false,
+        });
+        // shouldCreateOffer=true: onnegotiationneeded will fire and send offer
+        createPeerConnection(participantId, true);
+        break;
+      }
+
+      case 'user-left': {
+        console.log('[WS] user-left:', data.participantId);
+        removePeer(data.participantId);
+        break;
+      }
+
+      case 'signal-offer': {
+        await handleOffer(data.senderId, data.sdp);
+        break;
+      }
+
+      case 'signal-answer': {
+        await handleAnswer(data.senderId, data.sdp);
+        break;
+      }
+
+      case 'signal-ice-candidate': {
+        await handleIceCandidate(data.senderId, data.candidate);
+        break;
+      }
+
+      case 'media-state': {
+        updatePeer(data.participantId, {
+          isMuted: data.isMuted,
+          isVideoOff: data.isVideoOff,
+        });
+        break;
+      }
+
+      case 'chat-message': {
+        setChatMessages(prev => [
+          ...prev,
+          {
+            senderId: data.senderId,
+            senderName: data.senderName,
+            text: data.text,
+            timestamp: data.timestamp,
+            isSelf: data.senderId === participantIdRef.current,
+          },
+        ]);
+        break;
+      }
+
+      case 'pong':
+        break;
+
+      default:
+        console.log('[WS] Unknown message type:', data.type);
+        break;
+    }
+  };
 
   // ── Connect to signaling server ───────────────────────────────────────────
   const connect = useCallback(async () => {
@@ -442,8 +480,11 @@ export function useWebRTC(
 
     setSignalingStatus('connecting');
 
+    // ── Step 1: Acquire local media FIRST, BEFORE connecting WebSocket ────
+    // This guarantees localStreamRef.current is populated before any
+    // 'user-joined' or 'room-joined' messages arrive and peer connections
+    // are created. Without this, addTrack is never called on the PC.
     try {
-      // Acquire local media with resolution caps
       const stream = await navigator.mediaDevices.getUserMedia({
         video: VIDEO_CONSTRAINTS,
         audio: {
@@ -454,20 +495,23 @@ export function useWebRTC(
       });
       localStreamRef.current = stream;
       setLocalStream(stream);
+      console.log('[WebRTC] Local stream acquired:', stream.getTracks().map(t => `${t.kind}:${t.label}`));
     } catch (err) {
-      console.error('Failed to get local media:', err);
+      console.error('[WebRTC] Failed to get local media:', err);
       // Continue without media — user may only want to listen
     }
 
+    // ── Step 2: Connect WebSocket ─────────────────────────────────────────
     const pid = participantIdRef.current;
     const wsUrl = `${getWsBaseUrl()}/ws/meeting/${meetingId}/${pid}?userName=${encodeURIComponent(userName)}`;
+    console.log('[WS] Connecting to:', wsUrl);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('[WS] Connected');
       setSignalingStatus('connected');
-      // Start keepalive pings to prevent reverse proxy / cloud timeouts
       keepaliveRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'ping' }));
@@ -475,18 +519,22 @@ export function useWebRTC(
       }, KEEPALIVE_INTERVAL_MS);
     };
 
-    ws.onmessage = handleWsMessage;
+    // Route all messages through the ref — always calls latest handler
+    ws.onmessage = (event) => {
+      handleWsMessageRef.current?.(event);
+    };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log('[WS] Closed:', event.code, event.reason);
       setSignalingStatus('disconnected');
       if (keepaliveRef.current) clearInterval(keepaliveRef.current);
     };
 
     ws.onerror = (err) => {
-      console.error('WebSocket error:', err);
+      console.error('[WS] Error:', err);
       setSignalingStatus('error');
     };
-  }, [meetingId, userName, handleWsMessage]);
+  }, [meetingId, userName]);
 
   // ── Disconnect cleanly ────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
@@ -542,13 +590,11 @@ export function useWebRTC(
     screenStreamRef.current = displayStream;
     const screenTrack = displayStream.getVideoTracks()[0];
 
-    // Replace video track on all active peer connections
     peersRef.current.forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === 'video');
       if (sender) sender.replaceTrack(screenTrack);
     });
 
-    // Also update local preview
     const local = localStreamRef.current;
     if (local) {
       const oldVideoTrack = local.getVideoTracks()[0];
@@ -565,7 +611,6 @@ export function useWebRTC(
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
 
-    // Restore camera track
     try {
       const cameraStream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
       const cameraTrack = cameraStream.getVideoTracks()[0];
@@ -611,3 +656,4 @@ export function useWebRTC(
     signalingStatus,
   };
 }
+
