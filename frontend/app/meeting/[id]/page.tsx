@@ -189,6 +189,65 @@ function ChatPanel({
   );
 }
 
+// ── Participants Panel ────────────────────────────────────────────────────────
+function ParticipantsPanel({
+  selfName,
+  selfId,
+  remotePeers,
+  onClose,
+}: {
+  selfName: string;
+  selfId: string;
+  remotePeers: Map<string, { participantId: string; userName: string; isMuted: boolean; isVideoOff: boolean; stream: any }>;
+  onClose: () => void;
+}) {
+  const total = 1 + remotePeers.size;
+  return (
+    <div className="participants-panel">
+      <div className="participants-panel-header">
+        <span className="participants-panel-title">Participants ({total})</span>
+        <button className="participants-panel-close" onClick={onClose} title="Close">
+          <X size={18} />
+        </button>
+      </div>
+      <div className="participants-list">
+        {/* Self row */}
+        <div className="participant-row">
+          <div
+            className="participant-avatar"
+            style={{ background: avatarColor(selfId) }}
+          >
+            {selfName.slice(0, 2).toUpperCase() || 'U'}
+          </div>
+          <div className="participant-info">
+            <div className="participant-name">{selfName}</div>
+            <div className="participant-you-tag">You</div>
+          </div>
+        </div>
+
+        {/* Remote peers */}
+        {Array.from(remotePeers.values()).map(peer => (
+          <div key={peer.participantId} className="participant-row">
+            <div
+              className="participant-avatar"
+              style={{ background: avatarColor(peer.participantId) }}
+            >
+              {peer.userName.slice(0, 2).toUpperCase() || 'U'}
+            </div>
+            <div className="participant-info">
+              <div className="participant-name">{peer.userName}</div>
+            </div>
+            <div className="participant-icons">
+              {peer.isMuted && <MicOff size={13} />}
+              {peer.isVideoOff && <VideoOff size={13} />}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Signaling Badge ────────────────────────────────────────────────────────────
 function SignalingBadge({ status }: { status: string }) {
   const label: Record<string, string> = {
@@ -229,6 +288,10 @@ export default function MeetingRoom() {
   // Chat state
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Participants panel
+  const [showParticipants, setShowParticipants] = useState(false);
+
 
   // ── useWebRTC — only initialised after the user clicks "Join" ────────────
   const {
@@ -508,7 +571,14 @@ export default function MeetingRoom() {
       </div>
 
       {/* ── Bottom control bar ── */}
+      {/* 3-column grid: [left spacer] [centre controls] [right: End btn] */}
       <div className="room-bottom-bar">
+        {/* Left: empty — balances the right column to keep centre truly centred */}
+        <div className="ctrl-left-spacer" />
+
+        {/* Centre: all meeting controls */}
+        <div className="ctrl-centre">
+
         {/* Mute */}
         <div className="ctrl-btn-wrap">
           <button
@@ -545,66 +615,74 @@ export default function MeetingRoom() {
           <span>Security</span>
         </button>
 
-        {/* Participants */}
-        <button id="ctrl-participants" className="ctrl-btn active" style={{ position: 'relative' }}>
-          <Users size={20} />
-          <span>Participants</span>
-          <span className="participant-count-badge">{1 + remotePeers.size}</span>
-        </button>
+          {/* Participants */}
+          <button
+            id="ctrl-participants"
+            className={`ctrl-btn${showParticipants ? ' muted' : ' active'}`}
+            style={{ position: 'relative' }}
+            onClick={() => setShowParticipants(v => !v)}
+            title="Participants"
+          >
+            <Users size={20} />
+            <span>Participants</span>
+            <span className="participant-count-badge">{1 + remotePeers.size}</span>
+          </button>
 
-        {/* Chat */}
-        <button
-          id="ctrl-chat"
-          className="ctrl-btn active"
-          onClick={handleOpenChat}
-          style={{ position: 'relative' }}
-          title="Chat"
-        >
-          <MessageCircle size={20} />
-          <span>Chat</span>
-          {unreadCount > 0 && (
-            <span className="chat-unread-badge">{unreadCount}</span>
-          )}
-        </button>
+          {/* Chat */}
+          <button
+            id="ctrl-chat"
+            className="ctrl-btn active"
+            onClick={handleOpenChat}
+            style={{ position: 'relative' }}
+            title="Chat"
+          >
+            <MessageCircle size={20} />
+            <span>Chat</span>
+            {unreadCount > 0 && (
+              <span className="chat-unread-badge">{unreadCount}</span>
+            )}
+          </button>
 
-        {/* Screen Share */}
-        <button
-          id="ctrl-share"
-          className={`ctrl-btn${isScreenSharing ? ' muted' : ' share-screen'}`}
-          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-          title={isScreenSharing ? 'Stop sharing' : 'Share Screen'}
-        >
-          {isScreenSharing ? <Monitor size={20} /> : <Share2 size={20} />}
-          <span>{isScreenSharing ? 'Stop Share' : 'Share Screen'}</span>
-        </button>
+          {/* Screen Share */}
+          <button
+            id="ctrl-share"
+            className={`ctrl-btn${isScreenSharing ? ' muted' : ' share-screen'}`}
+            onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+            title={isScreenSharing ? 'Stop sharing' : 'Share Screen'}
+          >
+            {isScreenSharing ? <Monitor size={20} /> : <Share2 size={20} />}
+            <span>{isScreenSharing ? 'Stop Share' : 'Share Screen'}</span>
+          </button>
 
-        {/* Record */}
-        <button id="ctrl-record" className="ctrl-btn active">
-          <Circle size={20} />
-          <span>Record</span>
-        </button>
+          {/* Record */}
+          <button id="ctrl-record" className="ctrl-btn active">
+            <Circle size={20} />
+            <span>Record</span>
+          </button>
 
-        {/* Apps */}
-        <button id="ctrl-apps" className="ctrl-btn active">
-          <LayoutGrid size={20} />
-          <span>Apps</span>
-        </button>
+          {/* Apps */}
+          <button id="ctrl-apps" className="ctrl-btn active">
+            <LayoutGrid size={20} />
+            <span>Apps</span>
+          </button>
+        </div>{/* end ctrl-centre */}
 
-        <div className="ctrl-spacer" />
-
-        {/* End */}
-        <button
-          id="ctrl-end"
-          className="ctrl-end-btn"
-          onClick={async () => {
-            try { await endMeeting(meetingId); } catch { /* best-effort */ }
-            router.push('/');
-          }}
-          title="End meeting"
-        >
-          End
-        </button>
+        {/* Right: End button — always anchored to far right */}
+        <div className="ctrl-right">
+          <button
+            id="ctrl-end"
+            className="ctrl-end-btn"
+            onClick={async () => {
+              try { await endMeeting(meetingId); } catch { /* best-effort */ }
+              router.push('/');
+            }}
+            title="End meeting"
+          >
+            End
+          </button>
+        </div>
       </div>
+
 
       {/* ── Chat panel ── */}
       {showChat && (
@@ -612,6 +690,16 @@ export default function MeetingRoom() {
           messages={chatMessages}
           onSend={sendChat}
           onClose={() => setShowChat(false)}
+        />
+      )}
+
+      {/* ── Participants panel ── */}
+      {showParticipants && (
+        <ParticipantsPanel
+          selfName={userName}
+          selfId="self"
+          remotePeers={remotePeers}
+          onClose={() => setShowParticipants(false)}
         />
       )}
     </div>
