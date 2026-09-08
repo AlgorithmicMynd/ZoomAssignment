@@ -2,7 +2,7 @@
 
 A Zoom-inspired video conferencing web application built for the Scaler SDE Fullstack Assignment.
 
-> This project is an original implementation created for the assignment. It is not copied from an existing repository.
+> **AI Assistance:** This project utilized AI models (Claude Sonnet 4.6, Gemini 3.1 Pro, and Flash 3.8) to accelerate development. The use of AI significantly reduced development time by assisting with clean code generation and meticulously replicating the exact look, feel, design tokens, and color codes of the original Zoom platform.
 
 ## Features
 
@@ -20,6 +20,13 @@ A Zoom-inspired video conferencing web application built for the Scaler SDE Full
 - SQLite persistence
 - Seed/sample data
 
+### Multi-Peer Video Conferencing (WebRTC)
+- **Live Video & Audio:** Full-mesh WebRTC topology for low-latency communication.
+- **Dynamic UI Grid:** Automatically adapts from 1 to 6 participants seamlessly.
+- **Screen Sharing:** Integrated screen sharing capabilities.
+- **Real-Time Chat:** In-meeting WebSocket-based chat broadcast.
+- **Bandwidth Throttled:** Video constraints and bitrate clamped for performance.
+
 ### Bonus
 - [x] Responsive design
 - [ ] Authentication
@@ -32,11 +39,13 @@ A Zoom-inspired video conferencing web application built for the Scaler SDE Full
 - React 19
 - Tailwind CSS
 - Lucide React (Icons)
+- WebRTC (Native Browser APIs)
 
 ### Backend
 - Python 3.12
-- FastAPI
+- FastAPI (with WebSockets)
 - SQLAlchemy
+- Uvicorn (ASGI)
 
 ### Database
 - SQLite
@@ -45,13 +54,11 @@ A Zoom-inspired video conferencing web application built for the Scaler SDE Full
 
 ```text
 Next.js SPA
-    ↓ REST/JSON
+    ↓ REST (HTTP) / WebRTC Signaling (WebSocket)
 FastAPI
     ↓ SQLAlchemy
 SQLite
 ```
-
-See `md_files/04_ARCHITECTURE.md`.
 
 ## Local Setup
 
@@ -90,37 +97,21 @@ python -m app.seed
 
 ### Frontend (`frontend/.env.local`)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000/api
+NEXT_PUBLIC_WS_BASE_URL=ws://localhost:8000
 ```
 
 ### Backend (`backend/.env`)
 ```env
 FRONTEND_BASE_URL=http://localhost:3000
+DATABASE_URL=sqlite:///./zoom.db
 ```
 
-## Database
+## Deployment
 
-The application uses SQLite as required by the assignment.
-- Database Initialization: Automatically created on backend startup via SQLAlchemy `create_all()`.
-- Seed Command: `python -m app.seed`
-- Schema Location: `backend/app/models.py`
-
-## API
-
-See `md_files/06_API_SPEC.md`.
-
-## Assumptions
-
-- No login is required; a default user is assumed.
-- Authentication is not part of the initial core implementation.
-- SQLite is used because it is explicitly required.
-- Advanced production-scale infrastructure (WebRTC signaling, SFU) is simulated for UI purposes.
-
-## Design
-
-The UI is intentionally designed to closely resemble Zoom's visual language and workflows, as required by the assignment.
-
-See `md_files/07_UI_DESIGN.md`.
+The application is configured for easy deployment on free-tier cloud platforms:
+- **Backend:** `render.yaml` is provided for one-click deployment of the FastAPI WebSocket server on Render.com.
+- **Frontend:** Next.js is configured for seamless deployment on Vercel.
 
 ## Assignment Compliance
 
@@ -137,5 +128,6 @@ See `md_files/07_UI_DESIGN.md`.
 | Recent meetings | ✅ |
 | Seed data | ✅ |
 | Zoom-like UI | ✅ |
-| Public GitHub | ⬜ |
-| Deployment | ⬜ |
+| Multi-Peer WebRTC | ✅ |
+| Public GitHub | ✅ |
+| Deployment | ✅ |

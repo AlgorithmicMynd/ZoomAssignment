@@ -6,3 +6,11 @@ dist/
 .env.local
 .env*.local
 .DS_Store
+
+# AI and Design Artifacts
+Scaler_SDE_Fullstack_Assignment_-_Zoom_Clone.docx
+frontend/AGENTS.md
+frontend/CLAUDE.md
+UIMdfiles/
+uiImages/
+md_files/
